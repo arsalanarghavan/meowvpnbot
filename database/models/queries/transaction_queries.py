@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from database.models.transaction import Transaction, TransactionType, TransactionStatus
 
@@ -10,13 +10,14 @@ def get_user_transactions(db: Session, user_id: int, limit: int = 10) -> List[Tr
                                 .order_by(Transaction.created_at.desc())\
                                 .limit(limit).all()
 
-def create_transaction(db: Session, user_id: int, amount: int, tx_type: TransactionType) -> Transaction:
+def create_transaction(db: Session, user_id: int, amount: int, tx_type: TransactionType, plan_id: Optional[int] = None) -> Transaction:
     """Creates a new transaction record in the database."""
     new_tx = Transaction(
         user_id=user_id,
         amount=amount,
         type=tx_type,
-        status=TransactionStatus.PENDING
+        status=TransactionStatus.PENDING,
+        plan_id=plan_id  # <-- پارامتر جدید
     )
     db.add(new_tx)
     db.commit()

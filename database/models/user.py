@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import (Column, Integer, String, BigInteger, DateTime, 
+from sqlalchemy import (Column, Integer, String, BigInteger, DateTime,
                         Enum, Boolean, ForeignKey)
 from database.engine import Base
 

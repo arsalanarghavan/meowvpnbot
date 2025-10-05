@@ -15,3 +15,6 @@ python-dotenv
 
 # For handling dates and times
 pytz
+
+# For generating QR Codes
+qrcode[pil]

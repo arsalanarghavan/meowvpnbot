@@ -14,13 +14,24 @@ def get_wallet_menu_keyboard() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_payment_methods_keyboard() -> InlineKeyboardMarkup:
+def get_payment_methods_keyboard(purchase_flow: bool = False) -> InlineKeyboardMarkup:
     """Creates the inline keyboard for choosing a payment method."""
-    keyboard = [
+    # In purchase flow, 'back' should go to plan selection, otherwise to the wallet menu.
+    back_callback = 'back_to_plans' if purchase_flow else 'back_to_wallet'
+    
+    keyboard = []
+    # Only show wallet payment if it's part of a purchase flow
+    if purchase_flow:
+        keyboard.append([InlineKeyboardButton(_('buttons.payment.wallet'), callback_data='pay_wallet')])
+        
+    keyboard.extend([
+        # [InlineKeyboardButton(_('buttons.payment.online'), callback_data='pay_online')], # Zarinpal or other gateways
         [InlineKeyboardButton(_('buttons.payment.card_to_card'), callback_data='pay_card_to_card')],
-        [InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_wallet')]
-    ]
+        [InlineKeyboardButton(_('buttons.general.back'), callback_data=back_callback)]
+    ])
+
     return InlineKeyboardMarkup(keyboard)
+
 
 def get_admin_receipt_confirmation_keyboard(transaction_id: int) -> InlineKeyboardMarkup:
     """Creates the inline keyboard for admin to confirm or reject a receipt."""
@@ -67,11 +78,32 @@ def get_user_services_keyboard(services: list[Service]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 def get_service_management_keyboard(service_id: int) -> InlineKeyboardMarkup:
-    """Creates the management menu for a specific service."""
+    """Creates the detailed management menu for a specific service."""
     keyboard = [
-        [InlineKeyboardButton(_('buttons.service_manage.get_subscription'), callback_data=f'get_sub_{service_id}')],
-        [InlineKeyboardButton(_('buttons.service_manage.active_connections'), callback_data=f'get_connections_{service_id}')],
-        [InlineKeyboardButton(_('buttons.service_manage.regenerate_uuid'), callback_data=f'regen_uuid_{service_id}')],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.get_subscription'), callback_data=f'get_sub_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.get_qr_code'), callback_data=f'get_qr_{service_id}')
+        ],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.renew_service'), callback_data=f'renew_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.auto_renew'), callback_data=f'toggle_renew_{service_id}')
+        ],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.active_connections'), callback_data=f'get_connections_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.update_servers'), callback_data=f'update_servers_{service_id}')
+        ],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.change_note'), callback_data=f'edit_note_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.regenerate_uuid'), callback_data=f'regen_uuid_{service_id}')
+        ],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.connection_alerts'), callback_data=f'toggle_alerts_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.faq'), callback_data=f'faq_{service_id}')
+        ],
+        [
+            InlineKeyboardButton(_('buttons.service_manage.support'), callback_data=f'support_generic'),
+            InlineKeyboardButton(_('buttons.service_manage.cancel_service'), callback_data=f'cancel_service_{service_id}')
+        ],
         [InlineKeyboardButton(_('buttons.general.back_to_main_menu'), callback_data='back_to_main_menu')]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -81,6 +113,5 @@ def get_user_management_keyboard(user_id: int) -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton(_('buttons.admin_user_manage.view_services'), callback_data=f'admin_view_services_{user_id}')],
         [InlineKeyboardButton(_('buttons.admin_user_manage.add_balance'), callback_data=f'admin_add_balance_{user_id}')],
-        # [InlineKeyboardButton(_('buttons.admin_user_manage.ban_user'), callback_data=f'admin_ban_{user_id}')]
     ]
     return InlineKeyboardMarkup(keyboard)

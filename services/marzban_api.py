@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 from core.config import MARZBAN_API_BASE_URL, MARZBAN_API_USERNAME, MARZBAN_API_PASSWORD
 from database.models.plan import Plan
+from database.models.service import Service
 
 class MarzbanAPI:
     def __init__(self):
@@ -68,6 +69,42 @@ class MarzbanAPI:
             if e.response.status_code == 404:
                 return None
             print(f"Failed to get user {username}: {e.json()}")
+            raise
+
+    async def renew_user(self, service: Service):
+        """Renews a user in Marzban by extending expire date and adding traffic."""
+        await self._login()
+
+        username = service.username_in_panel
+        plan = service.plan
+        panel_user = await self.get_user(username)
+        if not panel_user:
+            raise Exception(f"User {username} not found in Marzban panel.")
+
+        # Calculate new expiration date
+        now_ts = int(datetime.utcnow().timestamp())
+        current_expire_ts = panel_user.get('expire') or now_ts
+        start_ts = current_expire_ts if current_expire_ts > now_ts else now_ts
+        new_expire_date = datetime.fromtimestamp(start_ts) + timedelta(days=plan.duration_days)
+        new_expire_timestamp = int(new_expire_date.timestamp())
+
+        # Calculate new data limit (add plan's traffic to the existing limit)
+        current_data_limit = panel_user.get('data_limit', 0)
+        new_traffic_bytes = (plan.traffic_gb * 1024 * 1024 * 1024) if plan.traffic_gb > 0 else 0
+        new_data_limit = current_data_limit + new_traffic_bytes
+
+        update_data = {
+            "expire": new_expire_timestamp,
+            "data_limit": new_data_limit,
+            "status": "active"
+        }
+
+        try:
+            response = await self.client.put(f"/api/user/{username}", json=update_data)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"Failed to renew user {username} in Marzban: {e.json()}")
             raise
 
     async def reset_user_uuid(self, username: str):
