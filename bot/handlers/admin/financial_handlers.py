@@ -1,14 +1,15 @@
+import uuid
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.translator import _
 from database.engine import SessionLocal
 from database.models.transaction import TransactionStatus, TransactionType
-from database.queries import transaction_queries, user_queries, service_queries
+from database.queries import (transaction_queries, user_queries, service_queries, panel_queries)
 from services.marzban_api import MarzbanAPI
 
 async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles admin's decision on a receipt and automates service creation or wallet charging."""
+    """Handles admin's decision on a receipt and automates service creation on all panels or wallet charging."""
     query = update.callback_query
     await query.answer()
 
@@ -24,35 +25,45 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
             return
 
         if action == "confirm_receipt":
-            # --- Main Logic: Differentiate between wallet charge and service purchase ---
             if tx.type == TransactionType.SERVICE_PURCHASE and tx.plan_id:
-                # This is a service purchase, create the service in Marzban
+                # --- Multi-Panel Service Creation Logic ---
                 await query.edit_message_text(_('messages.admin_creating_service_for_user', user_id=tx.user_id))
-                try:
-                    marzban_api = MarzbanAPI()
-                    marzban_user = await marzban_api.create_user(plan=tx.plan, prefix=f"uid{tx.user_id}")
-                    
-                    # Create the service record in our database
-                    service_queries.create_service_record(db, tx.user_id, tx.plan, marzban_user['username'])
-                    
-                    # Finalize transaction
-                    transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
-                    
-                    await query.edit_message_text(_('messages.admin_service_created_successfully', tx_id=tx_id))
-                    
-                    # Notify the user
-                    sub_link = marzban_user.get('subscription_url', 'Not found')
-                    await context.bot.send_message(
-                        chat_id=tx.user_id,
-                        text=_('messages.purchase_successful_after_confirm', sub_link=sub_link)
-                    )
-                except Exception as e:
-                    await query.edit_message_text(_('messages.error_marzban_api', error=str(e)))
-                    # Optionally, fail the transaction if API call fails
+                
+                panels = panel_queries.get_all_panels(db)
+                if not panels:
+                    await query.edit_message_text(_('messages.no_panels_configured'))
+                    return
+
+                service_username = f"uid{tx.user_id}-{uuid.uuid4().hex[:8]}"
+                user_details_list = []
+
+                for panel in panels:
+                    try:
+                        api = MarzbanAPI(panel)
+                        user_details = await api.create_user(plan=tx.plan, username=service_username)
+                        user_details_list.append(user_details)
+                    except Exception as e:
+                        print(f"Failed to create user on panel {panel.name} during receipt confirmation: {e}")
+                        continue
+                
+                if not user_details_list:
+                    await query.edit_message_text(_('messages.error_all_panels_failed'))
                     transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.FAILED)
                     return
 
-            else: # This is a regular wallet charge
+                combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
+                
+                service_queries.create_service_record(db, tx.user_id, tx.plan, service_username)
+                transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
+                
+                await query.edit_message_text(_('messages.admin_service_created_successfully', tx_id=tx_id))
+                
+                await context.bot.send_message(
+                    chat_id=tx.user_id,
+                    text=_('messages.purchase_successful_after_confirm', sub_link=combined_sub_link)
+                )
+
+            else: # Regular wallet charge
                 user_queries.update_wallet_balance(db, tx.user_id, tx.amount)
                 transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
                 

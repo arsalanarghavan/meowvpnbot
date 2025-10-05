@@ -1,3 +1,4 @@
+import uuid
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -5,47 +6,49 @@ from core.translator import _
 from database.engine import SessionLocal
 from database.models.plan import PlanCategory
 from database.models.transaction import TransactionType, TransactionStatus
-from database.queries import plan_queries, user_queries, service_queries, transaction_queries
+from database.queries import (plan_queries, user_queries, service_queries, 
+                              transaction_queries, panel_queries)
 from bot.keyboards.inline_keyboards import (get_plan_categories_keyboard, get_plans_keyboard,
                                             get_purchase_confirmation_keyboard, get_payment_methods_keyboard)
-from bot.states.conversation_states import SELECTING_CATEGORY, SELECTING_PLAN, CONFIRMING_PURCHASE, SELECTING_PAYMENT_METHOD, END_CONVERSATION
+from bot.states.conversation_states import (SELECTING_CATEGORY, SELECTING_PLAN, 
+                                            CONFIRMING_PURCHASE, SELECTING_PAYMENT_METHOD, END_CONVERSION)
 from services.marzban_api import MarzbanAPI
 
 async def start_purchase_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the service purchase conversation by showing categories."""
     text = _('messages.purchase_select_category')
     reply_markup = get_plan_categories_keyboard()
-
+    
     if update.message:
         await update.message.reply_text(text, reply_markup=reply_markup)
     elif update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-
+        
     return SELECTING_CATEGORY
 
 async def select_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles category selection and shows corresponding plans."""
     query = update.callback_query
     await query.answer()
-
+    
     category_name = query.data.split('_')[1]
     category_enum = PlanCategory[category_name]
     context.user_data['selected_category'] = category_enum
-
+    
     db = SessionLocal()
     try:
         plans = plan_queries.get_plans_by_category(db, category=category_enum)
         if not plans:
             await query.edit_message_text(_('messages.no_plans_in_category'), reply_markup=get_plan_categories_keyboard())
             return SELECTING_CATEGORY
-
+            
         text = _('messages.purchase_select_plan')
         reply_markup = get_plans_keyboard(plans)
         await query.edit_message_text(text, reply_markup=reply_markup)
     finally:
         db.close()
-
+        
     return SELECTING_PLAN
 
 async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -59,10 +62,10 @@ async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         plan = plan_queries.get_plan_by_id(db, plan_id)
         if not plan:
             await query.edit_message_text(_('messages.error_general'))
-            return END_CONVERSATION
+            return END_CONVERSION
 
         context.user_data['selected_plan'] = plan
-
+        
         confirmation_text = _('messages.purchase_confirmation',
                               name=plan.name,
                               duration=plan.duration_days,
@@ -84,18 +87,16 @@ async def show_payment_options(update: Update, context: ContextTypes.DEFAULT_TYP
     plan = context.user_data.get('selected_plan')
     if not plan:
         await query.edit_message_text(_('messages.error_general'))
-        return END_CONVERSATION
+        return END_CONVERSION
 
     text = _('messages.choose_payment_method')
-    # Pass purchase_flow=True to adjust the "back" button
     reply_markup = get_payment_methods_keyboard(purchase_flow=True)
     await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     return SELECTING_PAYMENT_METHOD
 
-
 async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processes the purchase using the user's wallet balance."""
+    """Processes the purchase using the user's wallet, creating the user on ALL panels."""
     query = update.callback_query
     await query.answer()
 
@@ -108,36 +109,55 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
 
         if db_user.wallet_balance < plan.price:
             await query.edit_message_text(_('messages.insufficient_balance', balance=db_user.wallet_balance))
-            return END_CONVERSATION
+            return END_CONVERSION
 
-        await query.edit_message_text(_('messages.creating_service'))
+        await query.edit_message_text(_('messages.creating_service_multi_server'))
 
-        marzban_api = MarzbanAPI()
-        marzban_user = await marzban_api.create_user(plan=plan, prefix=f"uid{user.id}")
+        # --- Multi-Panel Logic ---
+        panels = panel_queries.get_all_panels(db)
+        if not panels:
+            await query.edit_message_text(_('messages.no_panels_configured'))
+            return END_CONVERSION
+            
+        service_username = f"uid{user.id}-{uuid.uuid4().hex[:8]}"
         
-        # Deduct from wallet and create transaction and service records
+        user_details_list = []
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                user_details = await api.create_user(plan=plan, username=service_username)
+                user_details_list.append(user_details)
+            except Exception as e:
+                print(f"Failed to create user on panel {panel.name}: {e}")
+                continue
+        
+        if not user_details_list:
+            await query.edit_message_text(_('messages.error_all_panels_failed'))
+            return END_CONVERSION
+
+        combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
+
         user_queries.update_wallet_balance(db, user.id, -plan.price)
         tx = transaction_queries.create_transaction(db, user.id, plan.price, TransactionType.SERVICE_PURCHASE)
         transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
-        service_queries.create_service_record(db, user.id, plan, marzban_user['username'])
+        service_queries.create_service_record(db, user.id, plan, service_username)
 
-        sub_link = marzban_user.get('subscription_url', 'Not found')
-        await query.edit_message_text(_('messages.purchase_successful', sub_link=sub_link))
+        await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 
     except Exception as e:
         await query.edit_message_text(_('messages.error_general'))
-        print(f"Error during wallet payment processing: {e}")
+        print(f"Error during multi-panel wallet payment: {e}")
     finally:
         db.close()
         
-    return END_CONVERSATION
-
+    context.user_data.clear()
+    return END_CONVERSION
 
 async def back_to_plans(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Goes back to the plan selection menu."""
     query = update.callback_query
     await query.answer()
-
+    
     category_enum = context.user_data.get('selected_category')
     db = SessionLocal()
     try:
@@ -147,7 +167,7 @@ async def back_to_plans(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await query.edit_message_text(text, reply_markup=reply_markup)
     finally:
         db.close()
-
+    
     return SELECTING_PLAN
 
 async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -156,4 +176,4 @@ async def cancel_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     await query.edit_message_text(_('messages.operation_cancelled'))
     context.user_data.clear()
-    return END_CONVERSATION
+    return END_CONVERSION

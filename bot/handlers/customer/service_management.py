@@ -6,7 +6,7 @@ from io import BytesIO
 
 from core.translator import _
 from database.engine import SessionLocal
-from database.queries import service_queries, user_queries, transaction_queries
+from database.queries import (service_queries, user_queries, transaction_queries, panel_queries)
 from database.models.transaction import TransactionType, TransactionStatus
 from bot.keyboards.inline_keyboards import get_user_services_keyboard, get_service_management_keyboard
 from services.marzban_api import MarzbanAPI
@@ -41,7 +41,6 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         user_id = query.from_user.id
         service_id = service_id_override if service_id_override is not None else int(query.data.split('_')[2])
     elif service_id_override is not None:
-        # This case handles internal calls where there is no query object, e.g., after cancellation
         user_id = context.user_data.get('cancellation_user_id', update.effective_user.id)
         service_id = service_id_override
     else:
@@ -56,7 +55,13 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         
         context.user_data['current_service_id'] = service.id
         
-        api = MarzbanAPI()
+        all_panels = panel_queries.get_all_panels(db)
+        if not all_panels:
+             if query: await query.edit_message_text(_('messages.no_panels_configured'))
+             return
+
+        # We only need to contact one panel to get user status, assuming they are synced
+        api = MarzbanAPI(all_panels[0])
         panel_user = await api.get_user(service.username_in_panel)
         if not panel_user:
             if query: await query.edit_message_text(_('messages.error_service_not_found_panel'))
@@ -79,16 +84,17 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                  
         reply_markup = get_service_management_keyboard(service_id)
         
+        message_to_edit = query.message if query else context.user_data.get('cancellation_message_id')
+
         if query:
             await query.edit_message_text(text, reply_markup=reply_markup)
         elif 'cancellation_message_id' in context.user_data:
-            # If coming from cancellation, edit the original message
             await context.bot.edit_message_text(chat_id=user_id, message_id=context.user_data['cancellation_message_id'], text=text, reply_markup=reply_markup)
     finally:
         db.close()
 
 async def get_subscription_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Provides the subscription link for a service."""
+    """Provides the combined subscription link from all panels."""
     query = update.callback_query
     await query.answer()
     
@@ -96,17 +102,29 @@ async def get_subscription_link(update: Update, context: ContextTypes.DEFAULT_TY
     db = SessionLocal()
     try:
         service = service_queries.get_service_by_id(db, service_id)
-        api = MarzbanAPI()
-        panel_user = await api.get_user(service.username_in_panel)
-        
-        sub_link = panel_user.get('subscription_url', 'یافت نشد')
-        text = _('messages.subscription_link', sub_link=sub_link)
+        if not service:
+            await query.edit_message_text(_('messages.error_service_not_found'))
+            return
+
+        panels = panel_queries.get_all_panels(db)
+        user_details_list = []
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                user_details = await api.get_user(service.username_in_panel)
+                if user_details:
+                    user_details_list.append(user_details)
+            except Exception as e:
+                print(f"Could not fetch user {service.username_in_panel} from panel {panel.name} for sub link: {e}")
+
+        combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
+        text = _('messages.subscription_link', sub_link=combined_sub_link)
         await context.bot.send_message(chat_id=query.from_user.id, text=text, parse_mode='Markdown')
     finally:
         db.close()
 
 async def get_qr_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Generates and sends a QR code for the subscription link."""
+    """Generates and sends a QR code for the combined subscription link."""
     query = update.callback_query
     await query.answer(text=_('messages.generating_qr_code'))
 
@@ -114,11 +132,23 @@ async def get_qr_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     db = SessionLocal()
     try:
         service = service_queries.get_service_by_id(db, service_id)
-        api = MarzbanAPI()
-        panel_user = await api.get_user(service.username_in_panel)
-        sub_link = panel_user.get('subscription_url')
+        if not service:
+            return
 
-        if not sub_link:
+        panels = panel_queries.get_all_panels(db)
+        user_details_list = []
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                user_details = await api.get_user(service.username_in_panel)
+                if user_details:
+                    user_details_list.append(user_details)
+            except Exception as e:
+                print(f"Could not fetch user {service.username_in_panel} from panel {panel.name} for QR: {e}")
+
+        sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
+
+        if "یافت نشد" in sub_link:
             await context.bot.send_message(chat_id=query.from_user.id, text=_('messages.error_general'))
             return
 
@@ -133,7 +163,7 @@ async def get_qr_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         db.close()
 
 async def get_active_connections(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows active IPs connected to a service."""
+    """Shows active IPs connected to a service from all panels."""
     query = update.callback_query
     await query.answer()
 
@@ -141,23 +171,31 @@ async def get_active_connections(update: Update, context: ContextTypes.DEFAULT_T
     db = SessionLocal()
     try:
         service = service_queries.get_service_by_id(db, service_id)
-        api = MarzbanAPI()
-        panel_user = await api.get_user(service.username_in_panel)
+        panels = panel_queries.get_all_panels(db)
+        all_connections = []
         
-        connections = panel_user.get('online_at', [])
-        
-        if not connections:
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                panel_user = await api.get_user(service.username_in_panel)
+                if panel_user and 'online_at' in panel_user:
+                    all_connections.extend(panel_user['online_at'])
+            except Exception as e:
+                print(f"Could not get connections from panel {panel.name}: {e}")
+
+        if not all_connections:
             text = _('messages.no_active_connections')
         else:
-            ip_list = "\n".join([f"`{conn['ip']}`" for conn in connections])
-            text = _('messages.active_connections_list', count=len(connections), ip_list=ip_list)
+            unique_connections = {conn['ip']: conn for conn in all_connections}.values()
+            ip_list = "\n".join([f"`{conn['ip']}`" for conn in unique_connections])
+            text = _('messages.active_connections_list', count=len(unique_connections), ip_list=ip_list)
             
         await context.bot.send_message(chat_id=query.from_user.id, text=text, parse_mode='Markdown')
     finally:
         db.close()
 
 async def regenerate_uuid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Resets the user's UUID and provides a new subscription link."""
+    """Resets the user's UUID on all panels and provides a new subscription link."""
     query = update.callback_query
     await query.answer(text=_('messages.regenerating_uuid_wait'), show_alert=True)
 
@@ -165,28 +203,35 @@ async def regenerate_uuid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     db = SessionLocal()
     try:
         service = service_queries.get_service_by_id(db, service_id)
-        api = MarzbanAPI()
-        new_panel_user = await api.reset_user_uuid(service.username_in_panel)
+        panels = panel_queries.get_all_panels(db)
+        user_details_list = []
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                new_panel_user = await api.reset_user_uuid(service.username_in_panel)
+                if new_panel_user:
+                    user_details_list.append(new_panel_user)
+            except Exception as e:
+                print(f"Failed to reset UUID on panel {panel.name}: {e}")
 
-        if not new_panel_user:
+        if not user_details_list:
             await context.bot.send_message(chat_id=query.from_user.id, text=_('messages.error_general'))
             return
             
-        sub_link = new_panel_user.get('subscription_url', 'یافت نشد')
+        sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
         text = _('messages.regenerate_uuid_success', sub_link=sub_link)
         await context.bot.send_message(chat_id=query.from_user.id, text=text, parse_mode='Markdown')
+
     finally:
         db.close()
 
 async def back_to_main_menu_from_services(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Deletes the service management menu and shows a confirmation."""
     query = update.callback_query
     await query.answer()
     await query.message.delete()
     await context.bot.send_message(chat_id=query.from_user.id, text=_('messages.back_to_main_menu'))
 
 async def toggle_auto_renew_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the auto-renew button press."""
     query = update.callback_query
     service_id = int(query.data.split('_')[2])
     db = SessionLocal()
@@ -200,7 +245,48 @@ async def toggle_auto_renew_handler(update: Update, context: ContextTypes.DEFAUL
         db.close()
     await show_service_menu(update, context, service_id_override=service_id)
 
-# --- Change Note Conversation ---
+async def update_servers_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fetches configs from all panels and generates a new combined subscription link."""
+    query = update.callback_query
+    await query.answer(text=_('messages.updating_servers'))
+    
+    service_id = int(query.data.split('_')[2])
+    db = SessionLocal()
+    try:
+        service = service_queries.get_service_by_id(db, service_id)
+        if not service:
+            return
+
+        panels = panel_queries.get_all_panels(db)
+        if not panels:
+            return
+
+        user_details_list = []
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                user_details = await api.get_user(service.username_in_panel)
+                if user_details:
+                    user_details_list.append(user_details)
+            except Exception as e:
+                print(f"Could not fetch user {service.username_in_panel} from panel {panel.name}: {e}")
+                continue
+        
+        if not user_details_list:
+            return
+
+        combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
+        
+        await context.bot.send_message(
+            chat_id=query.from_user.id,
+            text=_('messages.update_servers_successful', sub_link=combined_sub_link),
+            parse_mode='Markdown'
+        )
+    finally:
+        db.close()
+
+# --- Conversation Handlers ---
+
 async def start_change_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -235,7 +321,6 @@ change_note_conv_handler = ConversationHandler(
     fallbacks=[CommandHandler('cancel', cancel_change_note)]
 )
 
-# --- Renew Service Conversation ---
 async def start_renewal_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -272,17 +357,32 @@ async def confirm_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if db_user.wallet_balance < plan.price:
             await query.edit_message_text(_('messages.insufficient_balance', balance=db_user.wallet_balance))
             return END_CONVERSION
+
         await query.edit_message_text(_('messages.renewing_service'))
-        marzban_api = MarzbanAPI()
-        await marzban_api.renew_user(service)
+        
+        panels = panel_queries.get_all_panels(db)
+        success_count = 0
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                await api.renew_user(service)
+                success_count += 1
+            except Exception as e:
+                print(f"Failed to renew user on panel {panel.name}: {e}")
+        
+        if success_count == 0:
+            await query.edit_message_text(_('messages.error_all_panels_failed_renewal'))
+            return END_CONVERSION
+            
         user_queries.update_wallet_balance(db, user_id, -plan.price)
         tx = transaction_queries.create_transaction(db, user_id, plan.price, TransactionType.SERVICE_PURCHASE)
         transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
         service_queries.renew_service_record(db, service)
+
         await query.edit_message_text(_('messages.renewal_successful'))
     except Exception as e:
         await query.edit_message_text(_('messages.error_general'))
-        print(f"Error during service renewal: {e}")
+        print(f"Error during multi-panel service renewal: {e}")
     finally:
         db.close()
     context.user_data.clear()
@@ -305,7 +405,6 @@ renew_service_conv_handler = ConversationHandler(
     fallbacks=[CallbackQueryHandler(cancel_renewal, pattern='^cancel_renew$')]
 )
 
-# --- Cancel Service Conversation ---
 async def start_cancellation_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -329,16 +428,24 @@ async def confirm_cancellation(update: Update, context: ContextTypes.DEFAULT_TYP
     db = SessionLocal()
     try:
         service = service_queries.get_service_by_id(db, service_id)
-        if service:
-            api = MarzbanAPI()
-            await api.deactivate_user(service.username_in_panel)
-            service_queries.cancel_service_record(db, service_id)
-            await query.edit_message_text(_('messages.cancellation_successful'))
-        else:
+        if not service:
             await query.edit_message_text(_('messages.error_service_not_found'))
+            return END_CONVERSION
+            
+        panels = panel_queries.get_all_panels(db)
+        for panel in panels:
+            try:
+                api = MarzbanAPI(panel)
+                await api.deactivate_user(service.username_in_panel)
+            except Exception as e:
+                print(f"Failed to deactivate user on panel {panel.name}: {e}")
+
+        service_queries.cancel_service_record(db, service_id)
+        
+        await query.edit_message_text(_('messages.cancellation_successful'))
     except Exception as e:
         await query.edit_message_text(_('messages.error_general'))
-        print(f"Error during cancellation: {e}")
+        print(f"Error during multi-panel service cancellation: {e}")
     finally:
         db.close()
     context.user_data.clear()
