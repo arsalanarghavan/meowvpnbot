@@ -81,14 +81,12 @@ class MarzbanAPI:
         if not panel_user:
             raise Exception(f"User {username} not found in Marzban panel.")
 
-        # Calculate new expiration date
         now_ts = int(datetime.utcnow().timestamp())
         current_expire_ts = panel_user.get('expire') or now_ts
         start_ts = current_expire_ts if current_expire_ts > now_ts else now_ts
         new_expire_date = datetime.fromtimestamp(start_ts) + timedelta(days=plan.duration_days)
         new_expire_timestamp = int(new_expire_date.timestamp())
 
-        # Calculate new data limit (add plan's traffic to the existing limit)
         current_data_limit = panel_user.get('data_limit', 0)
         new_traffic_bytes = (plan.traffic_gb * 1024 * 1024 * 1024) if plan.traffic_gb > 0 else 0
         new_data_limit = current_data_limit + new_traffic_bytes
@@ -127,6 +125,18 @@ class MarzbanAPI:
             return response.json()
         except httpx.HTTPStatusError as e:
             print(f"Failed to reset UUID for {username}: {e.json()}")
+            raise
+            
+    async def deactivate_user(self, username: str):
+        """Deactivates a user in Marzban by setting their status to 'disabled'."""
+        await self._login()
+        update_data = {"status": "disabled"}
+        try:
+            response = await self.client.put(f"/api/user/{username}", json=update_data)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"Failed to deactivate user {username} in Marzban: {e.json()}")
             raise
 
     async def get_all_users_from_panel(self):
