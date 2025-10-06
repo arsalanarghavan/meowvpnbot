@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import (Column, Integer, String, BigInteger, DateTime, 
+from sqlalchemy import (Column, Integer, String, BigInteger, DateTime,
                         Enum, ForeignKey)
 from sqlalchemy.orm import relationship
 
@@ -21,20 +21,22 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey('users.user_id'), nullable=False, index=True)
-    
+    plan_id = Column(Integer, ForeignKey('plans.id'), nullable=True) # <-- فیلد جدید
+
     # مبلغ تراکنش به تومان
     amount = Column(BigInteger, nullable=False)
-    
+
     # نوع تراکنش (شارژ کیف پول، خرید و...)
     type = Column(Enum(TransactionType), nullable=False)
-    
+
     # وضعیت تراکنش (در انتظار، موفق، ناموفق)
     status = Column(Enum(TransactionStatus), nullable=False, default=TransactionStatus.PENDING)
-    
+
     # کد پیگیری (مثلا کد بازگشتی از درگاه پرداخت یا کد رسید کارت به کارت)
-    tracking_code = Column(String(100), nullable=True, unique=True)
-    
+    tracking_code = Column(String(100), nullable=True, unique=False) # unique=False شد
+
     # تاریخ و زمان ثبت تراکنش
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user = relationship("User")
+    plan = relationship("Plan") # <-- ارتباط جدید
