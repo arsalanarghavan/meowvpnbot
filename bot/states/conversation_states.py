@@ -63,8 +63,10 @@ from telegram.ext import ConversationHandler
     AWAITING_NEW_PANEL_VALUE,
     CONFIRMING_PANEL_DELETION,
 
+    # State for Online Payment
+    AWAITING_ONLINE_PAYMENT_VERIFICATION,
 
-) = range(40) # Increased the range
+) = range(41) # Increased the range
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END

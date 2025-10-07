@@ -1,4 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from typing import List
 
 from core.translator import _
 from database.models.plan import PlanCategory, Plan
@@ -16,7 +17,6 @@ def get_wallet_menu_keyboard() -> InlineKeyboardMarkup:
 
 def get_payment_methods_keyboard(purchase_flow: bool = False) -> InlineKeyboardMarkup:
     """Creates the inline keyboard for choosing a payment method."""
-    # In purchase flow, 'back' should go to plan selection, otherwise to the wallet menu.
     back_callback = 'back_to_plans' if purchase_flow else 'back_to_wallet'
     
     keyboard = []
@@ -25,11 +25,19 @@ def get_payment_methods_keyboard(purchase_flow: bool = False) -> InlineKeyboardM
         keyboard.append([InlineKeyboardButton(_('buttons.payment.wallet'), callback_data='pay_wallet')])
         
     keyboard.extend([
-        # [InlineKeyboardButton(_('buttons.payment.online'), callback_data='pay_online')], # Zarinpal or other gateways
+        [InlineKeyboardButton(_('buttons.payment.online'), callback_data='pay_online')],
         [InlineKeyboardButton(_('buttons.payment.card_to_card'), callback_data='pay_card_to_card')],
         [InlineKeyboardButton(_('buttons.general.back'), callback_data=back_callback)]
     ])
 
+    return InlineKeyboardMarkup(keyboard)
+
+def get_online_payment_keyboard(payment_url: str, transaction_id: int) -> InlineKeyboardMarkup:
+    """Creates the keyboard with the payment link and verification button."""
+    keyboard = [
+        [InlineKeyboardButton(_('buttons.payment.go_to_gateway'), url=payment_url)],
+        [InlineKeyboardButton(_('buttons.payment.verify_payment'), callback_data=f'verify_payment_{transaction_id}')]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -52,7 +60,7 @@ def get_plan_categories_keyboard() -> InlineKeyboardMarkup:
     keyboard.append([InlineKeyboardButton(_('buttons.general.cancel'), callback_data='cancel_purchase')])
     return InlineKeyboardMarkup(keyboard)
 
-def get_plans_keyboard(plans: list[Plan]) -> InlineKeyboardMarkup:
+def get_plans_keyboard(plans: List[Plan]) -> InlineKeyboardMarkup:
     """Creates an inline keyboard listing available plans."""
     keyboard = []
     for plan in plans:
@@ -69,7 +77,7 @@ def get_purchase_confirmation_keyboard(plan_id: int) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_user_services_keyboard(services: list[Service]) -> InlineKeyboardMarkup:
+def get_user_services_keyboard(services: List[Service]) -> InlineKeyboardMarkup:
     """Creates an inline keyboard listing a user's active services."""
     keyboard = []
     for service in services:
@@ -101,7 +109,7 @@ def get_service_management_keyboard(service_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(_('buttons.service_manage.faq'), callback_data=f'faq_{service_id}')
         ],
         [
-            InlineKeyboardButton(_('buttons.service_manage.support'), callback_data=f'support_generic'),
+            InlineKeyboardButton(_('buttons.service_manage.support'), url=f"https://t.me/{_('config.support_id')}", callback_data=f'support_generic'),
             InlineKeyboardButton(_('buttons.service_manage.cancel_service'), callback_data=f'cancel_service_{service_id}')
         ],
         [InlineKeyboardButton(_('buttons.general.back_to_main_menu'), callback_data='back_to_main_menu')]

@@ -17,7 +17,7 @@ def create_transaction(db: Session, user_id: int, amount: int, tx_type: Transact
         amount=amount,
         type=tx_type,
         status=TransactionStatus.PENDING,
-        plan_id=plan_id  # <-- پارامتر جدید
+        plan_id=plan_id
     )
     db.add(new_tx)
     db.commit()
@@ -33,6 +33,15 @@ def update_transaction_status(db: Session, tx_id: int, status: TransactionStatus
     db_tx = get_transaction_by_id(db, tx_id)
     if db_tx:
         db_tx.status = status
+        db.commit()
+        db.refresh(db_tx)
+    return db_tx
+
+def update_transaction_tracking_code(db: Session, tx_id: int, code: str) -> Transaction:
+    """Updates the tracking code of a specific transaction."""
+    db_tx = get_transaction_by_id(db, tx_id)
+    if db_tx:
+        db_tx.tracking_code = code
         db.commit()
         db.refresh(db_tx)
     return db_tx
