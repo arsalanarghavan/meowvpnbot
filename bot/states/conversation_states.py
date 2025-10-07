@@ -70,8 +70,14 @@ from telegram.ext import ConversationHandler
     ADMIN_SETTINGS_MENU,
     EDIT_TEXTS_NAVIGATE,
     AWAITING_NEW_TEXT_VALUE,
+    
+    # States for Payment & General Settings
+    PAYMENT_SETTINGS_MENU,
+    GENERAL_SETTINGS_MENU,
+    AWAITING_NEW_SETTING_VALUE,
 
-) = range(44)
+
+) = range(47) # Increased the range
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END
