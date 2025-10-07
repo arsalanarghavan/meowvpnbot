@@ -56,19 +56,25 @@ class Translator:
         except (KeyError, TypeError):
             # Return the key itself if not found, making it easy to spot missing texts.
             return key
+            
+    def get_all_texts(self) -> Dict[str, Any]:
+        """Returns the entire dictionary of texts."""
+        return self._texts
 
     def update_text(self, key: str, new_value: str) -> bool:
         """Updates a text value and saves the changes to the JSON file."""
         try:
             data = self._texts
             keys = key.split('.')
-            for k in keys[:-1]:
+            last_key = keys.pop()
+            
+            for k in keys:
                 data = data[k]
             
-            data[keys[-1]] = new_value
+            data[last_key] = new_value
             self._save_texts(self._texts)
             return True
-        except KeyError:
+        except (KeyError, TypeError):
             return False
 
 # Create a single, globally accessible instance of the translator.

@@ -66,7 +66,12 @@ from telegram.ext import ConversationHandler
     # State for Online Payment
     AWAITING_ONLINE_PAYMENT_VERIFICATION,
 
-) = range(41) # Increased the range
+    # States for Admin Settings & Text Editing
+    ADMIN_SETTINGS_MENU,
+    EDIT_TEXTS_NAVIGATE,
+    AWAITING_NEW_TEXT_VALUE,
+
+) = range(44)
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END
