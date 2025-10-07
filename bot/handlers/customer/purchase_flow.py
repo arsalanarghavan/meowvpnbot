@@ -13,6 +13,7 @@ from bot.keyboards.inline_keyboards import (get_plan_categories_keyboard, get_pl
 from bot.states.conversation_states import (SELECTING_CATEGORY, SELECTING_PLAN, 
                                             CONFIRMING_PURCHASE, SELECTING_PAYMENT_METHOD, END_CONVERSION)
 from services.marzban_api import MarzbanAPI
+from bot.logic.commission import award_commission_for_purchase # <-- ایمپورت جدید
 
 async def start_purchase_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the service purchase conversation by showing categories."""
@@ -138,9 +139,13 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
         combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
 
         user_queries.update_wallet_balance(db, user.id, -plan.price)
-        tx = transaction_queries.create_transaction(db, user.id, plan.price, TransactionType.SERVICE_PURCHASE)
+        tx = transaction_queries.create_transaction(db, user.id, plan.price, TransactionType.SERVICE_PURCHASE, plan.id)
         transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
         service_queries.create_service_record(db, user.id, plan, service_username)
+
+        # --- Award Commission ---
+        award_commission_for_purchase(db, tx)
+        # ---
 
         await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 

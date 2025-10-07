@@ -16,6 +16,7 @@ from bot.states.conversation_states import (AWAITING_AMOUNT, AWAITING_RECEIPT,
                                             AWAITING_ONLINE_PAYMENT_VERIFICATION, END_CONVERSION)
 from services.zarinpal import Zarinpal
 from services.marzban_api import MarzbanAPI
+from bot.logic.commission import award_commission_for_purchase # <-- ایمپورت جدید
 
 
 async def ask_for_payment_method(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -131,7 +132,9 @@ async def receipt_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         reply_markup = get_admin_receipt_confirmation_keyboard(tx.id)
 
+        # Forward the message (photo or text)
         await context.bot.forward_message(chat_id=ADMIN_ID, from_chat_id=user.id, message_id=update.message.message_id)
+        # Send the details and confirmation buttons
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup)
 
         await update.message.reply_text(_('messages.receipt_sent_for_review'))
@@ -246,6 +249,10 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
 
                 combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
                 service_queries.create_service_record(db, tx.user_id, tx.plan, service_username)
+
+                # --- Award Commission ---
+                award_commission_for_purchase(db, tx)
+                # ---
                 
                 await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 

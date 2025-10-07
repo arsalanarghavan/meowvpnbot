@@ -9,7 +9,14 @@ def find_or_create_user(db: Session, user_id: int, referrer_id: Optional[int] = 
     if db_user:
         return db_user
 
-    new_user = User(user_id=user_id, referrer_id=referrer_id)
+    # Only set referrer_id if the user doesn't exist
+    new_user = User(user_id=user_id)
+    if referrer_id:
+        # Check if referrer exists before assigning
+        referrer_exists = db.query(User).filter(User.user_id == referrer_id).first()
+        if referrer_exists:
+            new_user.referrer_id = referrer_id
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -24,6 +31,15 @@ def update_wallet_balance(db: Session, user_id: int, amount: int) -> User:
     db_user = find_user_by_id(db, user_id)
     if db_user:
         db_user.wallet_balance += amount
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+def update_commission_balance(db: Session, user_id: int, amount: int) -> User:
+    """Adds or subtracts a specified amount from a user's commission balance."""
+    db_user = find_user_by_id(db, user_id)
+    if db_user:
+        db_user.commission_balance += amount
         db.commit()
         db.refresh(db_user)
     return db_user

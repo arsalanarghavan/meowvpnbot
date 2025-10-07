@@ -7,12 +7,14 @@ from database.engine import SessionLocal
 from database.models.transaction import TransactionStatus, TransactionType
 from database.queries import (transaction_queries, user_queries, service_queries, panel_queries)
 from services.marzban_api import MarzbanAPI
+from bot.logic.commission import award_commission_for_purchase # <-- ایمپورت جدید
 
 async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles admin's decision on a receipt and automates service creation on all panels or wallet charging."""
     query = update.callback_query
     await query.answer()
 
+    # Data is "confirm_receipt_{tx_id}" or "reject_receipt_{tx_id}"
     action_parts = query.data.split('_')
     action = action_parts[0] + "_" + action_parts[1]
     tx_id = int(action_parts[2])
@@ -21,13 +23,15 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
     try:
         tx = transaction_queries.get_transaction_by_id(db, tx_id)
         if not tx or tx.status != TransactionStatus.PENDING:
-            await query.edit_message_text(_('messages.admin_tx_already_processed'))
+            await query.edit_message_text(_('messages.admin_tx_already_processed'), reply_markup=None)
             return
 
+        original_message = query.message.text # Or photo caption
+        
         if action == "confirm_receipt":
-            if tx.type == TransactionType.SERVICE_PURCHASE and tx.plan_id:
+            if tx.type == TransactionType.SERVICE_PURCHASE and tx.plan:
                 # --- Multi-Panel Service Creation Logic ---
-                await query.edit_message_text(_('messages.admin_creating_service_for_user', user_id=tx.user_id))
+                await query.edit_message_text(original_message + "\n\n" + _('messages.admin_creating_service_for_user', user_id=tx.user_id))
                 
                 panels = panel_queries.get_all_panels(db)
                 if not panels:
@@ -56,7 +60,11 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
                 service_queries.create_service_record(db, tx.user_id, tx.plan, service_username)
                 transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
                 
-                await query.edit_message_text(_('messages.admin_service_created_successfully', tx_id=tx_id))
+                # --- Award Commission ---
+                award_commission_for_purchase(db, tx)
+                # ---
+                
+                await query.edit_message_text(original_message + "\n\n" + _('messages.admin_service_created_successfully', tx_id=tx_id), reply_markup=None)
                 
                 await context.bot.send_message(
                     chat_id=tx.user_id,
@@ -67,7 +75,7 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
                 user_queries.update_wallet_balance(db, tx.user_id, tx.amount)
                 transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
                 
-                await query.edit_message_text(_('messages.admin_receipt_confirmed', tx_id=tx_id))
+                await query.edit_message_text(original_message + "\n\n" + _('messages.admin_receipt_confirmed', tx_id=tx_id), reply_markup=None)
                 await context.bot.send_message(
                     chat_id=tx.user_id,
                     text=_('messages.user_receipt_confirmed', amount=tx.amount)
@@ -75,7 +83,7 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
 
         elif action == "reject_receipt":
             transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.FAILED)
-            await query.edit_message_text(_('messages.admin_receipt_rejected', tx_id=tx_id))
+            await query.edit_message_text(original_message + "\n\n" + _('messages.admin_receipt_rejected', tx_id=tx_id), reply_markup=None)
             await context.bot.send_message(
                 chat_id=tx.user_id,
                 text=_('messages.user_receipt_rejected')
