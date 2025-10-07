@@ -79,6 +79,17 @@ class MarzbanAPI:
             print(f"Failed to get user {username}: {e.json()}")
             raise
             
+    async def deactivate_user(self, username: str):
+        """Deactivates a user in Marzban."""
+        await self._login()
+        try:
+            response = await self.client.put(f"/api/user/{username}", json={"status": "disabled"})
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            print(f"Failed to deactivate user {username} in Marzban: {e.json()}")
+            raise
+
     # Other functions (renew, deactivate, etc.) would also need to be here,
     # but for now, we focus on creation and the new combined subscription link logic.
 

@@ -42,8 +42,12 @@ from telegram.ext import ConversationHandler
     AWAITING_PLAN_PRICE,
     AWAITING_PLAN_DEVICE_LIMIT,
     CONFIRMING_PLAN_CREATION,
+    SELECTING_PLAN_TO_MANAGE,
+    SELECTING_FIELD_TO_EDIT,
+    AWAITING_NEW_PLAN_VALUE,
+    CONFIRMING_PLAN_DELETION,
 
-    # ---> وضعیت‌های جدید <---
+
     # State for Service Cancellation
     AWAITING_CANCELLATION_CONFIRMATION,
 
@@ -54,9 +58,13 @@ from telegram.ext import ConversationHandler
     AWAITING_PANEL_USERNAME,
     AWAITING_PANEL_PASSWORD,
     CONFIRMING_PANEL_CREATION,
+    SELECTING_PANEL_TO_MANAGE,
+    SELECTING_FIELD_TO_EDIT_PANEL,
+    AWAITING_NEW_PANEL_VALUE,
+    CONFIRMING_PANEL_DELETION,
 
 
-) = range(30)
+) = range(40) # Increased the range
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END
