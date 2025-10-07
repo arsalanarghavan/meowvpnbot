@@ -25,6 +25,15 @@ def get_service_by_id(db: Session, service_id: int) -> Service:
     """Fetches a service by its primary ID."""
     return db.query(Service).filter(Service.id == service_id).first()
 
+def get_expiring_services_with_auto_renew(db: Session) -> List[Service]:
+    """Fetches active services with auto-renew enabled that are expiring within the next 24 hours."""
+    tomorrow = datetime.utcnow() + timedelta(days=1)
+    return db.query(Service).filter(
+        Service.is_active == True,
+        Service.auto_renew == True,
+        Service.expire_date <= tomorrow
+    ).all()
+
 def update_service_note(db: Session, service_id: int, new_note: str) -> Service:
     """Updates the note for a specific service."""
     service = get_service_by_id(db, service_id)
@@ -37,6 +46,7 @@ def update_service_note(db: Session, service_id: int, new_note: str) -> Service:
 def renew_service_record(db: Session, service: Service) -> Service:
     """Extends the expiration date of a service based on its plan's duration."""
     now = datetime.utcnow()
+    # If the service is already expired, renew from now. Otherwise, add to the expiry date.
     start_date = service.expire_date if service.expire_date > now else now
     duration = service.plan.duration_days
     service.expire_date = start_date + timedelta(days=duration)

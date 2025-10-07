@@ -1,3 +1,4 @@
+from datetime import time
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler,
                           CallbackQueryHandler, ConversationHandler, filters)
 
@@ -7,18 +8,14 @@ from core.translator import _
 
 # ===>> Import all handlers and states <<===
 from bot.handlers.customer import (start, info_handlers, wallet_handlers, payment_handlers,
-                                   test_account_handler, purchase_flow, service_management, 
+                                   test_account_handler, purchase_flow, service_management,
                                    gift_card_handler)
 from bot.handlers.marketer import marketer_handlers
-from bot.handlers.admin import (financial_handlers, gift_card_management, panel, 
-                                user_management, broadcast_handlers, plan_management, 
+from bot.handlers.admin import (financial_handlers, gift_card_management, panel,
+                                user_management, broadcast, plan_management,
                                 backup_handlers, panel_management)
-from bot.states.conversation_states import (AWAITING_RECEIPT, SELECTING_CATEGORY, SELECTING_PLAN,
-                                            CONFIRMING_PURCHASE, SELECTING_PAYMENT_METHOD, AWAITING_GIFT_CODE, AWAITING_GIFT_AMOUNT,
-                                            AWAITING_GIFT_COUNT, AWAITING_USER_ID_FOR_SEARCH,
-                                            AWAITING_AMOUNT_TO_ADD, AWAITING_AMOUNT, AWAITING_SERVICE_NOTE, 
-                                            AWAITING_RENEWAL_CONFIRMATION, AWAITING_BROADCAST_MESSAGE,
-                                            CONFIRMING_BROADCAST, PLAN_MANAGEMENT_MENU, PANEL_MANAGEMENT_MENU, END_CONVERSION)
+from bot.states.conversation_states import *
+from bot.jobs import check_and_renew_services  # <-- ایمپورت کردن جاب جدید
 
 logger = get_logger(__name__)
 
@@ -27,7 +24,12 @@ def main() -> None:
     logger.info("Starting bot...")
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
+
+    # --- Job Scheduling for Auto-Renewal ---
+    job_queue = application.job_queue
+    # Runs the job every day at 01:00 server time
+    job_queue.run_daily(check_and_renew_services, time=time(hour=1, minute=0), name='daily_renewal_check')
+
     admin_filter = filters.User(user_id=ADMIN_ID)
 
     # --- Conversation Handler Definitions ---
@@ -47,7 +49,7 @@ def main() -> None:
             AWAITING_RECEIPT: [MessageHandler(filters.PHOTO | filters.TEXT & ~filters.COMMAND, payment_handlers.receipt_handler)]
         },
         fallbacks=[CommandHandler('cancel', payment_handlers.cancel_payment)],
-        map_to_parent={ END_CONVERSION: END_CONVERSION }
+        map_to_parent={END_CONVERSION: END_CONVERSION}
     )
 
     purchase_conv_handler = ConversationHandler(
@@ -70,7 +72,7 @@ def main() -> None:
         },
         fallbacks=[CallbackQueryHandler(purchase_flow.cancel_purchase, pattern='^cancel_purchase$')],
     )
-    
+
     change_note_conv_handler = service_management.change_note_conv_handler
     renew_service_conv_handler = service_management.renew_service_conv_handler
     cancel_service_conv_handler = service_management.cancel_service_conv_handler
@@ -78,44 +80,110 @@ def main() -> None:
     new_gift_conv_handler = gift_card_management.new_gift_conv_handler
     user_search_conv_handler = user_management.user_search_conv_handler
     add_balance_conv_handler = user_management.add_balance_conv_handler
-    broadcast_conv_handler = broadcast_handlers.broadcast_conv_handler
+    broadcast_conv_handler = broadcast.broadcast_conv_handler
+
+    # Nested Conversation Handlers for Admin Settings
+    add_plan_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(plan_management.start_add_plan, pattern='^add_plan$')],
+        states={
+            AWAITING_PLAN_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_plan_name)],
+            AWAITING_PLAN_CATEGORY: [CallbackQueryHandler(plan_management.receive_plan_category, pattern='^plan_cat_')],
+            AWAITING_PLAN_DURATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_plan_duration)],
+            AWAITING_PLAN_TRAFFIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_plan_traffic)],
+            AWAITING_PLAN_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_plan_price)],
+            AWAITING_PLAN_DEVICE_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_plan_device_limit)],
+            CONFIRMING_PLAN_CREATION: [
+                CallbackQueryHandler(plan_management.confirm_create_plan, pattern='^confirm_create_plan$'),
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(plan_management.cancel_plan_creation, pattern='^cancel_create_plan$')]
+    )
+
+    edit_plan_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(plan_management.start_edit_plan, pattern='^edit_plan$')],
+        states={
+            AWAITING_NEW_PLAN_VALUE: [
+                 CallbackQueryHandler(plan_management.select_field_to_edit, pattern='^edit_field_'),
+                 MessageHandler(filters.TEXT & ~filters.COMMAND, plan_management.receive_new_plan_value)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(plan_management.show_plan_management_menu, pattern='^back_to_plan_manage_menu_')]
+    )
     
+    add_panel_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(panel_management.start_add_panel, pattern='^add_panel$')],
+        states={
+            AWAITING_PANEL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_management.receive_panel_name)],
+            AWAITING_PANEL_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_management.receive_panel_url)],
+            AWAITING_PANEL_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_management.receive_panel_username)],
+            AWAITING_PANEL_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_management.receive_panel_password)],
+            CONFIRMING_PANEL_CREATION: [CallbackQueryHandler(panel_management.confirm_create_panel, pattern='^confirm_create_panel$')]
+        },
+        fallbacks=[CallbackQueryHandler(panel_management.cancel_panel_creation, pattern='^cancel_create_panel$')]
+    )
+
+    edit_panel_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(panel_management.start_edit_panel, pattern='^edit_panel$')],
+        states={
+            AWAITING_NEW_PANEL_VALUE: [
+                CallbackQueryHandler(panel_management.select_field_to_edit_panel, pattern='^edit_panel_field_'),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, panel_management.receive_new_panel_value)
+            ]
+        },
+        fallbacks=[CallbackQueryHandler(panel_management.show_panel_management_menu, pattern='^back_to_panel_manage_menu_')]
+    )
+
+    # Main Admin Settings Conversation Handlers
     plan_management_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_settings.plan_management')}$"), plan_management.start_plan_management)],
         states={
-            PLAN_MANAGEMENT_MENU: [
-                plan_management.add_plan_conv_handler,
-                CallbackQueryHandler(panel.back_to_settings_menu, pattern='^back_to_settings_menu$')
+            SELECTING_PLAN_TO_MANAGE: [
+                CallbackQueryHandler(plan_management.show_plan_management_menu, pattern='^manage_plan_'),
+                add_plan_conv_handler,
+                CallbackQueryHandler(panel.show_settings_menu, pattern='^back_to_settings_menu$'),
+            ],
+            SELECTING_FIELD_TO_EDIT: [
+                edit_plan_conv_handler,
+                CallbackQueryHandler(plan_management.start_delete_plan, pattern='^delete_plan'),
+                CallbackQueryHandler(plan_management.start_plan_management, pattern='^back_to_plan_list$')
+            ],
+            CONFIRMING_PLAN_DELETION: [
+                CallbackQueryHandler(plan_management.confirm_delete_plan, pattern='^confirm_delete_'),
+                CallbackQueryHandler(plan_management.show_plan_management_menu, pattern='^back_to_plan_manage_menu')
             ]
         },
-        fallbacks=[CallbackQueryHandler(panel.admin_panel_entry, pattern='^back_to_admin_main$')]
+        fallbacks=[CommandHandler('cancel', panel.show_settings_menu)],
     )
 
     panel_management_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_settings.panel_management')}$"), panel_management.start_panel_management)],
         states={
-            PANEL_MANAGEMENT_MENU: [
-                panel_management.add_panel_conv_handler,
-                 CallbackQueryHandler(panel.back_to_settings_menu, pattern='^back_to_settings_menu$')
+            SELECTING_PANEL_TO_MANAGE: [
+                CallbackQueryHandler(panel_management.show_panel_management_menu, pattern='^manage_panel_'),
+                add_panel_conv_handler,
+                CallbackQueryHandler(panel.show_settings_menu, pattern='^back_to_settings_menu$'),
+            ],
+            SELECTING_FIELD_TO_EDIT_PANEL: [
+                edit_panel_conv_handler,
+                CallbackQueryHandler(panel_management.start_delete_panel, pattern='^delete_panel'),
+                CallbackQueryHandler(panel_management.start_panel_management, pattern='^back_to_panel_list$')
+            ],
+            CONFIRMING_PANEL_DELETION: [
+                CallbackQueryHandler(panel_management.confirm_delete_panel, pattern='^confirm_delete_panel_'),
+                CallbackQueryHandler(panel_management.show_panel_management_menu, pattern='^back_to_panel_manage_menu_')
             ]
         },
-        fallbacks=[CallbackQueryHandler(panel.admin_panel_entry, pattern='^back_to_admin_main$')]
+        fallbacks=[CommandHandler('cancel', panel.show_settings_menu)],
     )
-
+    
     # ------------------- Handler Registration -------------------
+    # Customer and General Handlers
     application.add_handler(purchase_conv_handler)
     application.add_handler(wallet_charge_conv_handler)
-    application.add_handler(card_to_card_conv_handler)
     application.add_handler(change_note_conv_handler)
     application.add_handler(renew_service_conv_handler)
     application.add_handler(cancel_service_conv_handler)
     application.add_handler(gift_card_conv_handler)
-    application.add_handler(new_gift_conv_handler)
-    application.add_handler(user_search_conv_handler)
-    application.add_handler(add_balance_conv_handler)
-    application.add_handler(broadcast_conv_handler)
-    application.add_handler(plan_management_conv_handler)
-    application.add_handler(panel_management_conv_handler)
 
     # Admin Handlers
     application.add_handler(CommandHandler("admin", panel.admin_panel_entry, filters=admin_filter))
@@ -124,8 +192,14 @@ def main() -> None:
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.backup')}$"), backup_handlers.backup_database))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.exit')}$"), panel.exit_admin_panel))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.back_to_main')}$"), panel.admin_panel_entry))
+    application.add_handler(new_gift_conv_handler)
+    application.add_handler(user_search_conv_handler)
+    application.add_handler(add_balance_conv_handler)
+    application.add_handler(broadcast_conv_handler)
+    application.add_handler(plan_management_conv_handler)
+    application.add_handler(panel_management_conv_handler)
 
-    # Customer & Marketer Handlers
+    # Customer & Marketer Menu Buttons
     application.add_handler(CommandHandler("start", start.start_command))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.account_info')}$"), info_handlers.account_info))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.support')}$"), info_handlers.support_info))
@@ -133,19 +207,19 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.wallet')}$"), wallet_handlers.wallet_menu))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.test_account')}$"), test_account_handler.get_test_account))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.manage_service')}$"), service_management.list_services))
-    
+
     # Marketer Panel Handlers
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.marketer_panel')}$"), marketer_handlers.marketer_panel_entry))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.invite_link')}$"), marketer_handlers.get_invite_link))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.stats')}$"), marketer_handlers.show_stats))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.request_payout')}$"), marketer_handlers.request_payout))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.back_to_main')}$"), marketer_handlers.back_to_main_menu_from_marketer))
-    
-    # Callback Query Handlers
+
+    # General Callback Query Handlers
     application.add_handler(CallbackQueryHandler(wallet_handlers.transaction_history, pattern='^transaction_history$'))
     application.add_handler(CallbackQueryHandler(payment_handlers.back_to_wallet, pattern='^back_to_wallet$'))
     application.add_handler(CallbackQueryHandler(financial_handlers.handle_receipt_confirmation, pattern='^(confirm_receipt_|reject_receipt_)'))
-    
+
     # Service Management Callbacks
     application.add_handler(CallbackQueryHandler(service_management.show_service_menu, pattern='^manage_service_'))
     application.add_handler(CallbackQueryHandler(service_management.get_subscription_link, pattern='^get_sub_'))
@@ -153,8 +227,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(service_management.get_active_connections, pattern='^get_connections_'))
     application.add_handler(CallbackQueryHandler(service_management.regenerate_uuid, pattern='^regen_uuid_'))
     application.add_handler(CallbackQueryHandler(service_management.toggle_auto_renew_handler, pattern='^toggle_renew_'))
+    application.add_handler(CallbackQueryHandler(service_management.update_servers_handler, pattern='^update_servers_'))
     application.add_handler(CallbackQueryHandler(service_management.back_to_main_menu_from_services, pattern='^back_to_main_menu$'))
-    
+
     # Admin User Management Callbacks
     application.add_handler(CallbackQueryHandler(user_management.view_user_services, pattern='^admin_view_services_'))
 
