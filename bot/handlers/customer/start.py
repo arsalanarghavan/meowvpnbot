@@ -6,7 +6,7 @@ from core.translator import _
 from database.engine import SessionLocal
 from database.models.user import UserRole
 from database.queries import user_queries
-from core.config import ADMIN_ID
+from core.config import ADMIN_IDS  # <--- 'ADMIN_ID' به 'ADMIN_IDS' تغییر کرد
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /start command, referrals, and shows the correct menu."""
@@ -28,8 +28,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         db_user = user_queries.find_or_create_user(db, user_id=user.id, referrer_id=referrer_id)
 
-        # Update user's role to admin if they are the admin
-        if user.id == ADMIN_ID and db_user.role != UserRole.admin:
+        # Update user's role to admin if they are in the admin list
+        # <--- شرط بررسی از برابری با یک آیدی به وجود داشتن در لیست تغییر کرد
+        if user.id in ADMIN_IDS and db_user.role != UserRole.admin:
             db_user.role = UserRole.admin
             db.commit()
             db.refresh(db_user)

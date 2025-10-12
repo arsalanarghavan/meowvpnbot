@@ -5,15 +5,16 @@ from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
 from core.translator import _
 from database.engine import SessionLocal
 from database.queries import plan_queries
-from database.models.plan import PlanCategory
+from database.models.plan import Plan, PlanCategory
 from bot.states.conversation_states import (
     PLAN_MANAGEMENT_MENU, AWAITING_PLAN_NAME, AWAITING_PLAN_CATEGORY,
     AWAITING_PLAN_DURATION, AWAITING_PLAN_TRAFFIC, AWAITING_PLAN_PRICE,
     AWAITING_PLAN_DEVICE_LIMIT, CONFIRMING_PLAN_CREATION, ADMIN_SETTINGS_MENU,
-    # States needed for new functionalities (should be added to conversation_states.py)
-    SELECTING_PLAN_TO_MANAGE, CONFIRMING_PLAN_DELETION
+    CONFIRMING_PLAN_DELETION, SELECTING_FIELD_TO_EDIT_PLAN, AWAITING_NEW_PLAN_VALUE
 )
 from bot.handlers.admin.settings_handlers import back_to_settings
+from core.telegram_logger import log_error
+
 
 # --- Main Menu ---
 async def start_plan_management(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -29,12 +30,12 @@ async def start_plan_management(update: Update, context: ContextTypes.DEFAULT_TY
         if not plans:
             text = _('messages.plan_management_no_plans_list')
         else:
-            text = _('messages.plan_management_menu_list') # A new message for listing plans
+            text = _('messages.plan_management_menu_list')
             for p in plans:
+                # Add an edit button (pencil emoji) and a delete button (trash emoji) for each plan
                 keyboard.append([
-                    InlineKeyboardButton(f"🗑️ {p.name}", callback_data=f'delete_plan_{p.id}'),
-                    # Edit functionality can be added here in the future if needed
-                    # InlineKeyboardButton(f"✏️ {p.name}", callback_data=f'edit_plan_{p.id}'),
+                    InlineKeyboardButton(f"✏️ {p.name}", callback_data=f'edit_plan_start_{p.id}'),
+                    InlineKeyboardButton(f"🗑️", callback_data=f'delete_plan_{p.id}'),
                 ])
 
         # Add control buttons
@@ -42,11 +43,14 @@ async def start_plan_management(update: Update, context: ContextTypes.DEFAULT_TY
         keyboard.append([InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # Send message logic
         if query:
             await query.edit_message_text(text, reply_markup=reply_markup)
-        else:
+        elif update.message:
             await update.message.reply_text(text, reply_markup=reply_markup)
 
+    except Exception as e:
+        await log_error(context, e, "start_plan_management")
     finally:
         db.close()
 
@@ -59,7 +63,7 @@ async def delete_plan_confirmation(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     plan_id = int(query.data.split('_')[2])
-    context.user_data['plan_to_delete_id'] = plan_id
+    context.user_data['plan_to_manage_id'] = plan_id
 
     db = SessionLocal()
     try:
@@ -72,7 +76,7 @@ async def delete_plan_confirmation(update: Update, context: ContextTypes.DEFAULT
         keyboard = [
             [
                 InlineKeyboardButton(_('buttons.general.confirm_delete'), callback_data='confirm_delete_plan'),
-                InlineKeyboardButton(_('buttons.general.cancel'), callback_data='cancel_delete')
+                InlineKeyboardButton(_('buttons.general.cancel'), callback_data='back_to_plan_list')
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -87,22 +91,20 @@ async def confirm_delete_plan(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Deletes the plan from the database."""
     query = update.callback_query
     await query.answer()
-    plan_id = context.user_data.pop('plan_to_delete_id', None)
+    plan_id = context.user_data.pop('plan_to_manage_id', None)
 
     if not plan_id:
         return ConversationHandler.END
 
     db = SessionLocal()
     try:
-        # Assuming plan_queries has a delete_plan_by_id function
-        # If not, it needs to be created.
-        # For now, let's assume it exists.
-        # plan_queries.delete_plan_by_id(db, plan_id)
         plan = db.query(Plan).filter(Plan.id == plan_id).first()
         if plan:
             db.delete(plan)
             db.commit()
         await query.edit_message_text(_('messages.plan_deleted_successfully'))
+    except Exception as e:
+        await log_error(context, e, "confirm_delete_plan")
     finally:
         db.close()
 
@@ -110,6 +112,70 @@ async def confirm_delete_plan(update: Update, context: ContextTypes.DEFAULT_TYPE
     await start_plan_management(update, context)
     return PLAN_MANAGEMENT_MENU
 
+# --- Edit Plan Conversation ---
+async def start_edit_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Shows options for which field of the plan to edit."""
+    query = update.callback_query
+    await query.answer()
+    plan_id = int(query.data.split('_')[3])
+    context.user_data['plan_to_manage_id'] = plan_id
+    db = SessionLocal()
+    try:
+        plan = plan_queries.get_plan_by_id(db, plan_id)
+
+        text = _('messages.plan_edit_select_field', name=plan.name)
+        # Define fields that can be edited
+        keyboard = [
+            [InlineKeyboardButton(_('buttons.plan_edit.name'), callback_data='edit_plan_field_name')],
+            [InlineKeyboardButton(_('buttons.plan_edit.price'), callback_data='edit_plan_field_price')],
+            [InlineKeyboardButton(_('buttons.plan_edit.duration'), callback_data='edit_plan_field_duration_days')],
+            [InlineKeyboardButton(_('buttons.plan_edit.traffic'), callback_data='edit_plan_field_traffic_gb')],
+            [InlineKeyboardButton(_('buttons.plan_edit.device_limit'), callback_data='edit_plan_field_device_limit')],
+            [InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_plan_list')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text, reply_markup=reply_markup)
+    finally:
+        db.close()
+    return SELECTING_FIELD_TO_EDIT_PLAN
+
+async def select_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receives the field to edit and asks for the new value."""
+    query = update.callback_query
+    await query.answer()
+
+    field = query.data.split('edit_plan_field_')[1]
+    context.user_data['field_to_edit'] = field
+
+    await query.edit_message_text(_(f'messages.plan_enter_new_{field}'))
+    return AWAITING_NEW_PLAN_VALUE
+
+async def receive_new_plan_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receives the new value and updates the plan in the database."""
+    new_value = update.message.text
+    field = context.user_data.get('field_to_edit')
+    plan_id = context.user_data.get('plan_to_manage_id')
+
+    if not field or not plan_id:
+        await update.message.reply_text(_('messages.error_general'))
+        return ConversationHandler.END
+        
+    update_data = {field: new_value}
+
+    db = SessionLocal()
+    try:
+        plan_queries.update_plan(db, plan_id, update_data)
+        await update.message.reply_text(_('messages.plan_updated_successfully'))
+    except Exception as e:
+        await log_error(context, e, "receive_new_plan_value")
+        await update.message.reply_text(_('messages.error_general'))
+    finally:
+        db.close()
+        context.user_data.pop('field_to_edit', None)
+    
+    # Go back to the main plan management menu
+    await start_plan_management(update, context)
+    return PLAN_MANAGEMENT_MENU
 
 # --- Add Plan Conversation ---
 async def start_add_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -220,16 +286,24 @@ async def cancel_plan_creation(update: Update, context: ContextTypes.DEFAULT_TYP
 # --- Conversation Handler ---
 add_plan_conv_handler = ConversationHandler(
     entry_points=[
-        MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.plan_management')}$"), start_plan_management)
+        MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.plan_management')}$"), start_plan_management),
+        CallbackQueryHandler(start_plan_management, pattern='^back_to_plan_list$')
     ],
     states={
         PLAN_MANAGEMENT_MENU: [
             CallbackQueryHandler(start_add_plan, pattern='^add_plan$'),
             CallbackQueryHandler(delete_plan_confirmation, pattern='^delete_plan_'),
+            CallbackQueryHandler(start_edit_plan, pattern='^edit_plan_start_'),
         ],
         CONFIRMING_PLAN_DELETION: [
             CallbackQueryHandler(confirm_delete_plan, pattern='^confirm_delete_plan$'),
             CallbackQueryHandler(start_plan_management, pattern='^cancel_delete$'),
+        ],
+        SELECTING_FIELD_TO_EDIT_PLAN: [
+            CallbackQueryHandler(select_field_to_edit, pattern='^edit_plan_field_')
+        ],
+        AWAITING_NEW_PLAN_VALUE: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_plan_value)
         ],
         AWAITING_PLAN_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_plan_name)],
         AWAITING_PLAN_CATEGORY: [CallbackQueryHandler(receive_plan_category, pattern='^plan_cat_')],

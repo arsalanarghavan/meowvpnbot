@@ -10,7 +10,7 @@ from database.queries import (service_queries, user_queries, transaction_queries
 from database.models.transaction import TransactionType, TransactionStatus
 from bot.keyboards.inline_keyboards import get_user_services_keyboard, get_service_management_keyboard
 from services.marzban_api import MarzbanAPI
-from bot.states.conversation_states import (AWAITING_SERVICE_NOTE, AWAITING_RENEWAL_CONFIRMATION, 
+from bot.states.conversation_states import (AWAITING_SERVICE_NOTE, AWAITING_RENEWAL_CONFIRMATION,
                                             AWAITING_CANCELLATION_CONFIRMATION, END_CONVERSION)
 from bot.logic.commission import award_commission_for_purchase
 from core.telegram_logger import log_error
@@ -21,16 +21,17 @@ async def list_services(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     db = SessionLocal()
     try:
         services = service_queries.get_user_active_services(db, user_id=user_id)
-        
+
         if not services:
             await update.message.reply_text(_('messages.no_active_services'))
             return
-            
+
         text = _('messages.select_service_to_manage')
         reply_markup = get_user_services_keyboard(services)
         await update.message.reply_text(text, reply_markup=reply_markup)
     except Exception as e:
         await log_error(context, e, "list_services")
+        await update.message.reply_text(_('messages.error_general'))
     finally:
         db.close()
 
@@ -56,9 +57,9 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         if not service or service.user_id != user_id:
             if query: await query.edit_message_text(_('messages.error_service_not_found'))
             return
-        
+
         context.user_data['current_service_id'] = service.id
-        
+
         all_panels = panel_queries.get_all_panels(db)
         if not all_panels:
              if query: await query.edit_message_text(_('messages.no_panels_configured'))
@@ -75,18 +76,18 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         break # Found user on a panel, no need to check others
                 except Exception:
                     continue # Try next panel
-        
+
         if not panel_user:
             if query: await query.edit_message_text(_('messages.error_service_not_found_panel'))
             return
-            
+
         used_traffic_gb = round(panel_user.get('used_traffic', 0) / (1024**3), 2)
         data_limit_gb = round(panel_user.get('data_limit', 0) / (1024**3), 2) if panel_user.get('data_limit', 0) > 0 else _('words.unlimited')
         expire_ts = panel_user.get('expire', 0)
         expire_date = datetime.fromtimestamp(expire_ts).strftime('%Y-%m-%d') if expire_ts else _('words.unknown')
         status_key = f"status.{panel_user.get('status', 'unknown')}"
         auto_renew_status = "✅ " + _('enums.status.enabled') if service.auto_renew else "❌ " + _('enums.status.disabled')
-        
+
         text = _('messages.service_details_full',
                  note=service.note or f"{_('words.service')} #{service.id}",
                  status=_(status_key),
@@ -94,14 +95,14 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                  data_limit=data_limit_gb,
                  expire_date=expire_date,
                  auto_renew=auto_renew_status)
-                 
+
         reply_markup = get_service_management_keyboard(service_id)
-        
+
         if query:
             await query.edit_message_text(text, reply_markup=reply_markup)
         elif 'cancellation_message_id' in context.user_data:
             await context.bot.edit_message_text(chat_id=user_id, message_id=context.user_data['cancellation_message_id'], text=text, reply_markup=reply_markup)
-    
+
     except Exception as e:
         await log_error(context, e, "show_service_menu")
         if query: await query.edit_message_text(_('messages.error_general'))
@@ -112,7 +113,7 @@ async def get_subscription_link(update: Update, context: ContextTypes.DEFAULT_TY
     """Provides the combined subscription link from all active panels."""
     query = update.callback_query
     await query.answer()
-    
+
     db = SessionLocal()
     try:
         service_id = int(query.data.split('_')[2])
@@ -197,10 +198,10 @@ async def get_active_connections(update: Update, context: ContextTypes.DEFAULT_T
         service_id = int(query.data.split('_')[2])
         service = service_queries.get_service_by_id(db, service_id)
         if not service: return
-        
+
         panels = panel_queries.get_all_panels(db)
         all_ips = set()
-        
+
         for panel in panels:
             if not panel.is_active: continue
             try:
@@ -217,7 +218,7 @@ async def get_active_connections(update: Update, context: ContextTypes.DEFAULT_T
         else:
             ip_list = "\n".join([f"`{ip}`" for ip in all_ips])
             text = _('messages.active_connections_list', count=len(all_ips), ip_list=ip_list)
-            
+
         await query.message.reply_text(text, parse_mode='Markdown')
     except Exception as e:
         await log_error(context, e, "get_active_connections")
@@ -234,7 +235,7 @@ async def regenerate_uuid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         service_id = int(query.data.split('_')[2])
         service = service_queries.get_service_by_id(db, service_id)
         if not service: return
-            
+
         panels = panel_queries.get_all_panels(db)
         user_details_list = []
         for panel in panels:
@@ -250,7 +251,7 @@ async def regenerate_uuid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not user_details_list:
             await context.bot.send_message(chat_id=query.from_user.id, text=_('messages.error_all_panels_failed_user'))
             return
-            
+
         sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
         text = _('messages.regenerate_uuid_success', sub_link=sub_link)
         await query.message.reply_text(text, parse_mode='Markdown')
@@ -286,6 +287,19 @@ async def update_servers_handler(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer(_('messages.updating_servers'), show_alert=False)
     await get_subscription_link(update, context)
 
+# --- Handlers for Unimplemented Buttons ---
+async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the FAQ button click."""
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text(_('messages.faq_info'))
+
+async def toggle_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the connection alerts button click."""
+    query = update.callback_query
+    await query.answer(_('messages.feature_not_implemented'), show_alert=True)
+
+
 # --- Change Note Conversation ---
 async def start_change_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -304,6 +318,7 @@ async def receive_new_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(_('messages.note_changed_successfully'))
     except Exception as e:
         await log_error(context, e, "receive_new_note")
+        await update.message.reply_text(_('messages.error_general'))
     finally:
         db.close()
     context.user_data.pop('service_id_for_note', None)
@@ -345,6 +360,7 @@ async def start_renewal_flow(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return AWAITING_RENEWAL_CONFIRMATION
     except Exception as e:
         await log_error(context, e, "start_renewal_flow")
+        await query.edit_message_text(_('messages.error_general'))
         return END_CONVERSION
     finally:
         db.close()
@@ -364,7 +380,7 @@ async def confirm_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return END_CONVERSION
 
         await query.edit_message_text(_('messages.renewing_service'))
-        
+
         panels = panel_queries.get_all_panels(db)
         success_count = 0
         for panel in panels:
@@ -375,11 +391,11 @@ async def confirm_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 success_count += 1
             except Exception as e:
                 await log_error(context, e, f"Failed to renew user on panel {panel.name}")
-        
+
         if success_count == 0:
             await query.edit_message_text(_('messages.error_all_panels_failed_user'))
             return END_CONVERSION
-            
+
         user_queries.update_wallet_balance(db, user_id, -plan.price)
         tx = transaction_queries.create_transaction(db, user_id, plan.price, TransactionType.SERVICE_PURCHASE, plan.id)
         transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
@@ -440,7 +456,7 @@ async def confirm_cancellation(update: Update, context: ContextTypes.DEFAULT_TYP
         if not service:
             await query.edit_message_text(_('messages.error_service_not_found'))
             return END_CONVERSION
-            
+
         panels = panel_queries.get_all_panels(db)
         for panel in panels:
             if not panel.is_active: continue
@@ -451,7 +467,7 @@ async def confirm_cancellation(update: Update, context: ContextTypes.DEFAULT_TYP
                 await log_error(context, e, f"Failed to deactivate user on panel {panel.name}")
 
         service_queries.cancel_service_record(db, service_id)
-        
+
         await query.edit_message_text(_('messages.cancellation_successful'))
     except Exception as e:
         await query.edit_message_text(_('messages.error_general'))

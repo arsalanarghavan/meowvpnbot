@@ -121,5 +121,7 @@ def get_user_management_keyboard(user_id: int) -> InlineKeyboardMarkup:
     keyboard = [
         [InlineKeyboardButton(_('buttons.admin_user_manage.view_services'), callback_data=f'admin_view_services_{user_id}')],
         [InlineKeyboardButton(_('buttons.admin_user_manage.add_balance'), callback_data=f'admin_add_balance_{user_id}')],
+        # --- NEW: Added button for changing user role ---
+        [InlineKeyboardButton(_('buttons.admin_user_manage.change_role'), callback_data=f'admin_change_role_{user_id}')],
     ]
     return InlineKeyboardMarkup(keyboard)

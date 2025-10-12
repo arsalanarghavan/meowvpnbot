@@ -3,11 +3,11 @@ import traceback
 import json
 from datetime import time
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler,
-                          CallbackQueryHandler, ConversationHandler, filters)
+                          CallbackQueryHandler, ConversationHandler, filters, ContextTypes)
 from telegram.constants import ParseMode
 from telegram import Update
 
-from core.config import BOT_TOKEN, ADMIN_ID, LOG_CHANNEL_ID
+from core.config import BOT_TOKEN, ADMIN_IDS, LOG_CHANNEL_ID
 from core.logger import get_logger
 from core.translator import _
 
@@ -61,8 +61,8 @@ def main() -> None:
 
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Pass admin_id to bot_data for global access
-    application.bot_data['admin_id'] = ADMIN_ID
+    # Pass admin_ids to bot_data for global access
+    application.bot_data['admin_ids'] = ADMIN_IDS
 
     # --- Error Handler ---
     application.add_error_handler(error_handler)
@@ -71,7 +71,7 @@ def main() -> None:
     job_queue = application.job_queue
     job_queue.run_daily(check_and_renew_services, time=time(hour=1, minute=0), name='daily_renewal_check')
 
-    admin_filter = filters.User(user_id=ADMIN_ID)
+    admin_filter = filters.User(user_id=ADMIN_IDS)
 
     # --- Conversation Handler Definitions ---
 
@@ -89,7 +89,7 @@ def main() -> None:
     )
     
     wallet_charge_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(payment_handlers.ask_for_payment_method, pattern='^increase_balance$')],
+        entry_points=[CallbackQueryHandler(wallet_handlers.ask_for_payment_method, pattern='^increase_balance$')],
         states={
             AWAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, payment_handlers.receive_charge_amount)],
             SELECTING_PAYMENT_METHOD: [
@@ -132,7 +132,7 @@ def main() -> None:
                 settings_handlers.payment_settings_conv,
                 settings_handlers.general_settings_conv,
                 settings_handlers.commission_settings_conv,
-                plan_management.add_plan_conv_handler,
+                plan_management.add_plan_conv_handler, # <-- Fully featured plan management
                 panel_management.panel_management_conv,
             ]
         },
@@ -140,7 +140,7 @@ def main() -> None:
     )
 
     # --- Handler Registration ---
-    # Conversations
+    # Customer Conversations
     application.add_handler(purchase_conv_handler)
     application.add_handler(wallet_charge_conv_handler)
     application.add_handler(service_management.change_note_conv_handler)
@@ -152,6 +152,7 @@ def main() -> None:
     application.add_handler(gift_card_management.new_gift_conv_handler)
     application.add_handler(user_management.user_search_conv_handler)
     application.add_handler(user_management.add_balance_conv_handler)
+    application.add_handler(user_management.change_role_conv_handler) # <-- NEW: Role management
     application.add_handler(broadcast.broadcast_conv_handler)
     application.add_handler(admin_settings_conv)
 
@@ -160,6 +161,7 @@ def main() -> None:
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.dashboard')}$"), panel.show_dashboard))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.backup')}$"), backup_handlers.backup_database))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.exit')}$"), panel.exit_admin_panel))
+    application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.confirm_receipts')}$"), financial_handlers.list_pending_receipts)) # <-- NEW: Receipt list handler
     
     # --- Customer Commands & Messages ---
     application.add_handler(CommandHandler("start", start.start_command))
@@ -177,11 +179,12 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.request_payout')}$"), marketer_handlers.request_payout))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.marketer_panel.back_to_main')}$"), marketer_handlers.back_to_main_menu_from_marketer))
     
-    # --- Callback Query Handlers (Stateless) ---
+    # --- Callback Query Handlers (Stateless & Actions) ---
     application.add_handler(CallbackQueryHandler(wallet_handlers.transaction_history, pattern='^transaction_history$'))
     application.add_handler(CallbackQueryHandler(financial_handlers.handle_receipt_confirmation, pattern='^(confirm_receipt_|reject_receipt_)'))
-    application.add_handler(CallbackQueryHandler(payout_handlers.handle_payout_decision, pattern='^payout_'))
+    application.add_handler(CallbackQueryHandler(payout_handlers.handle_payout_decision, pattern='^(payout_confirm_|payout_reject_)')) # <-- FIX: More specific pattern
     
+    # Service Management Callbacks
     application.add_handler(CallbackQueryHandler(service_management.show_service_menu, pattern='^manage_service_'))
     application.add_handler(CallbackQueryHandler(service_management.get_subscription_link, pattern='^get_sub_'))
     application.add_handler(CallbackQueryHandler(service_management.get_qr_code, pattern='^get_qr_'))
@@ -191,7 +194,14 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(service_management.update_servers_handler, pattern='^update_servers_'))
     application.add_handler(CallbackQueryHandler(service_management.back_to_main_menu_from_services, pattern='^back_to_main_menu$'))
     
+    # NEW: Handlers for previously unimplemented service buttons
+    application.add_handler(CallbackQueryHandler(service_management.faq_handler, pattern='^faq_'))
+    application.add_handler(CallbackQueryHandler(service_management.toggle_alerts_handler, pattern='^toggle_alerts_'))
+
+    # Admin User Management Callbacks
     application.add_handler(CallbackQueryHandler(user_management.view_user_services, pattern='^admin_view_services_'))
+    application.add_handler(CallbackQueryHandler(user_management.start_change_role, pattern='^admin_change_role_')) # <-- NEW: Role change start
+    application.add_handler(CallbackQueryHandler(user_management.set_user_role, pattern='^set_role_')) # <-- NEW: Set role
 
     logger.info("Bot is running...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

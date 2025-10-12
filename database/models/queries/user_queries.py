@@ -1,7 +1,7 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from database.models.user import User
+from database.models.user import User, UserRole
 
 def find_or_create_user(db: Session, user_id: int, referrer_id: Optional[int] = None) -> User:
     """Finds a user by their Telegram user_id. If not found, creates one with an optional referrer."""
@@ -22,11 +22,11 @@ def find_or_create_user(db: Session, user_id: int, referrer_id: Optional[int] = 
     db.refresh(new_user)
     return new_user
 
-def find_user_by_id(db: Session, user_id: int) -> User:
+def find_user_by_id(db: Session, user_id: int) -> Optional[User]:
     """Finds a user by their Telegram user_id. Returns None if not found."""
     return db.query(User).filter(User.user_id == user_id).first()
 
-def update_wallet_balance(db: Session, user_id: int, amount: int) -> User:
+def update_wallet_balance(db: Session, user_id: int, amount: int) -> Optional[User]:
     """Adds or subtracts a specified amount from a user's wallet balance."""
     db_user = find_user_by_id(db, user_id)
     if db_user:
@@ -35,7 +35,7 @@ def update_wallet_balance(db: Session, user_id: int, amount: int) -> User:
         db.refresh(db_user)
     return db_user
 
-def update_commission_balance(db: Session, user_id: int, amount: int) -> User:
+def update_commission_balance(db: Session, user_id: int, amount: int) -> Optional[User]:
     """Adds or subtracts a specified amount from a user's commission balance."""
     db_user = find_user_by_id(db, user_id)
     if db_user:
@@ -44,7 +44,21 @@ def update_commission_balance(db: Session, user_id: int, amount: int) -> User:
         db.refresh(db_user)
     return db_user
 
-def set_user_received_test_account(db: Session, user_id: int) -> User:
+def update_user_role(db: Session, user_id: int, new_role: UserRole) -> Optional[User]:
+    """Updates the role of a specific user."""
+    db_user = find_user_by_id(db, user_id)
+    if db_user:
+        # Ensure admin role is not assigned accidentally
+        if new_role != UserRole.admin and db_user.role == UserRole.admin:
+            # Add logic here if you want to prevent demoting an admin, or log it.
+            # For now, we allow it.
+            pass
+        db_user.role = new_role
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+def set_user_received_test_account(db: Session, user_id: int) -> Optional[User]:
     """Flags that a user has received their test account."""
     db_user = find_user_by_id(db, user_id)
     if db_user:

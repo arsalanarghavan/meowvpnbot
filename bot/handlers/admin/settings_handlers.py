@@ -4,12 +4,11 @@ from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
                           CallbackQueryHandler, CommandHandler, filters)
 from unittest.mock import MagicMock
 
-
 from core.translator import translator, _
 from bot.keyboards.reply_keyboards import get_admin_settings_menu
 from bot.states.conversation_states import (
     ADMIN_SETTINGS_MENU, EDIT_TEXTS_NAVIGATE, AWAITING_NEW_TEXT_VALUE,
-    PAYMENT_SETTINGS_MENU, GENERAL_SETTINGS_MENU, AWAITING_NEW_SETTING_VALUE, 
+    PAYMENT_SETTINGS_MENU, GENERAL_SETTINGS_MENU, AWAITING_NEW_SETTING_VALUE,
     COMMISSION_SETTINGS_MENU, AWAITING_COMMISSION_THRESHOLD, AWAITING_COMMISSION_RATE,
     END_CONVERSION
 )
@@ -23,12 +22,18 @@ async def show_settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Displays the admin settings menu."""
     text = _('messages.admin_settings_welcome')
     reply_markup = get_admin_settings_menu()
-    
-    if hasattr(update, 'message') and update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-    elif hasattr(update, 'callback_query') and update.callback_query:
-        await update.callback_query.message.reply_text(text, reply_markup=reply_markup)
-        
+
+    try:
+        if hasattr(update, 'message') and update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        elif hasattr(update, 'callback_query') and update.callback_query:
+            # Delete the previous inline keyboard message and send a new one with the reply keyboard
+            await update.callback_query.message.delete()
+            await update.callback_query.message.reply_text(text, reply_markup=reply_markup)
+
+    except Exception as e:
+        await log_error(context, e, "show_settings_menu")
+
     return ADMIN_SETTINGS_MENU
 
 
@@ -40,26 +45,36 @@ async def start_payment_settings(update: Update, context: ContextTypes.DEFAULT_T
         card_number = setting_queries.get_setting(db, 'card_number', _('messages.setting_not_set'))
         card_holder = setting_queries.get_setting(db, 'card_holder', _('messages.setting_not_set'))
         merchant_id = setting_queries.get_setting(db, 'zarinpal_merchant_id', ZARINPAL_MERCHANT_ID or _('messages.setting_not_set'))
+        min_payout = setting_queries.get_setting(db, 'minimum_payout_amount', '50000') # Default 50,000
+    except Exception as e:
+        await log_error(context, e, "loading payment settings")
+        card_number = card_holder = merchant_id = min_payout = _('messages.error_general')
     finally:
         db.close()
 
     text = _('messages.payment_settings_menu',
              card_number=card_number,
              card_holder=card_holder,
-             merchant_id=merchant_id)
+             merchant_id=merchant_id,
+             min_payout=min_payout)
 
     keyboard = [
         [InlineKeyboardButton(_('buttons.payment_settings.edit_card_number'), callback_data='edit_setting_card_number')],
         [InlineKeyboardButton(_('buttons.payment_settings.edit_card_holder'), callback_data='edit_setting_card_holder')],
         [InlineKeyboardButton(_('buttons.payment_settings.edit_merchant_id'), callback_data='edit_setting_zarinpal_merchant_id')],
+        [InlineKeyboardButton(_('buttons.payment_settings.edit_min_payout'), callback_data='edit_setting_minimum_payout_amount')],
         [InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    try:
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        elif update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        await log_error(context, e, "start_payment_settings")
+
 
     return PAYMENT_SETTINGS_MENU
 
@@ -69,9 +84,12 @@ async def start_general_settings(update: Update, context: ContextTypes.DEFAULT_T
     db = SessionLocal()
     try:
         test_account_status = setting_queries.get_setting(db, 'test_account_enabled', 'True') == 'True'
+    except Exception as e:
+        await log_error(context, e, "loading general settings")
+        test_account_status = False # Default to a safe value on error
     finally:
         db.close()
-        
+
     status_text = "✅ " + _('enums.status.enabled') if test_account_status else "❌ " + _('enums.status.disabled')
     button_text = _('buttons.general_settings.disable_test_account') if test_account_status else _('buttons.general_settings.enable_test_account')
 
@@ -81,11 +99,14 @@ async def start_general_settings(update: Update, context: ContextTypes.DEFAULT_T
         [InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+
+    try:
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        elif update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        await log_error(context, e, "start_general_settings")
 
     return GENERAL_SETTINGS_MENU
 
@@ -98,9 +119,11 @@ async def toggle_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE
         is_enabled = setting_queries.get_setting(db, 'test_account_enabled', 'True') == 'True'
         new_status = 'False' if is_enabled else 'True'
         setting_queries.update_setting(db, 'test_account_enabled', new_status)
+    except Exception as e:
+        await log_error(context, e, "toggle_test_account")
     finally:
         db.close()
-        
+
     await start_general_settings(query, context)
     return GENERAL_SETTINGS_MENU
 
@@ -112,7 +135,8 @@ async def start_commission_settings(update: Update, context: ContextTypes.DEFAUL
     try:
         tiers_json = setting_queries.get_setting(db, 'commission_tiers', '[]')
         tiers = sorted(json.loads(tiers_json), key=lambda x: x['threshold'])
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, Exception) as e:
+        await log_error(context, e, "loading commission settings")
         tiers = []
     finally:
         db.close()
@@ -129,8 +153,7 @@ async def start_commission_settings(update: Update, context: ContextTypes.DEFAUL
 
     text = _('messages.commission_settings_menu', tiers=tiers_text)
     keyboard = [[InlineKeyboardButton(_('buttons.commission_settings.add_tier'), callback_data='add_tier')]]
-    
-    # Add delete buttons for each tier
+
     for i, tier in enumerate(tiers):
         keyboard.append([
             InlineKeyboardButton(
@@ -142,10 +165,13 @@ async def start_commission_settings(update: Update, context: ContextTypes.DEFAUL
     keyboard.append([InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    try:
+        if update.message:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        elif update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+    except Exception as e:
+        await log_error(context, e, "start_commission_settings")
 
     return COMMISSION_SETTINGS_MENU
 
@@ -180,7 +206,6 @@ async def receive_commission_rate(update: Update, context: ContextTypes.DEFAULT_
             tiers_json = setting_queries.get_setting(db, 'commission_tiers', '[]')
             tiers = json.loads(tiers_json)
             
-            # Check for duplicate threshold
             if any(t['threshold'] == threshold for t in tiers):
                 await update.message.reply_text(_('messages.commission_error_duplicate_threshold'))
                 return COMMISSION_SETTINGS_MENU
@@ -193,10 +218,11 @@ async def receive_commission_rate(update: Update, context: ContextTypes.DEFAULT_
     except (ValueError, TypeError):
         await update.message.reply_text(_('messages.commission_error_invalid_rate'))
         return AWAITING_COMMISSION_RATE
+    except Exception as e:
+        await log_error(context, e, "receive_commission_rate")
     finally:
         context.user_data.pop('new_tier_threshold', None)
         
-    # Refresh the menu
     await start_commission_settings(update, context)
     return COMMISSION_SETTINGS_MENU
 
@@ -213,7 +239,7 @@ async def delete_commission_tier(update: Update, context: ContextTypes.DEFAULT_T
         if 0 <= tier_index < len(tiers):
             tiers.pop(tier_index)
             setting_queries.update_setting(db, 'commission_tiers', json.dumps(tiers))
-    except (json.JSONDecodeError, IndexError) as e:
+    except (json.JSONDecodeError, IndexError, Exception) as e:
         await log_error(context, e, "deleting commission tier")
     finally:
         db.close()
@@ -232,7 +258,11 @@ async def prompt_for_new_setting_value(update: Update, context: ContextTypes.DEF
     context.user_data['setting_key_to_edit'] = key_to_edit
     context.user_data['message_to_edit_id'] = query.message.message_id
     
-    await query.edit_message_text(_('messages.edit_setting_send_new_value', key_name=_(f'settings_keys.{key_to_edit}')))
+    try:
+        await query.edit_message_text(_('messages.edit_setting_send_new_value', key_name=_(f'settings_keys.{key_to_edit}')))
+    except Exception as e:
+        await log_error(context, e, "prompt_for_new_setting_value")
+        
     return AWAITING_NEW_SETTING_VALUE
 
 async def receive_new_setting_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -249,24 +279,26 @@ async def receive_new_setting_value(update: Update, context: ContextTypes.DEFAUL
     db = SessionLocal()
     try:
         setting_queries.update_setting(db, key, new_value)
+    except Exception as e:
+        await log_error(context, e, "receive_new_setting_value")
     finally:
         db.close()
         
     context.user_data.pop('setting_key_to_edit', None)
     context.user_data.pop('message_to_edit_id', None)
     
-    mock_update = MagicMock()
-    mock_update.callback_query = None
-    mock_update.message = MagicMock()
-    mock_update.message.edit_text = lambda text, reply_markup: context.bot.edit_message_text(
+    # Mock an update object to refresh the menu correctly
+    mock_query = MagicMock()
+    mock_query.message = MagicMock()
+    mock_query.message.message_id = message_id
+    mock_query.message.edit_text = lambda text, reply_markup: context.bot.edit_message_text(
         chat_id=update.effective_chat.id, message_id=message_id, text=text, reply_markup=reply_markup)
 
-
-    if key in ['card_number', 'card_holder', 'zarinpal_merchant_id']:
-        await start_payment_settings(mock_update.message, context)
+    if key in ['card_number', 'card_holder', 'zarinpal_merchant_id', 'minimum_payout_amount']:
+        await start_payment_settings(mock_query, context)
         return PAYMENT_SETTINGS_MENU
     else:
-        await start_general_settings(mock_update.message, context)
+        await start_general_settings(mock_query, context)
         return GENERAL_SETTINGS_MENU
 
 async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -274,7 +306,6 @@ async def back_to_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = update.callback_query
     await query.answer()
     
-    await query.message.delete()
     await show_settings_menu(query, context)
     
     return END_CONVERSION
@@ -293,7 +324,11 @@ async def start_text_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     keyboard.append([InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(text, reply_markup=reply_markup)
+    if update.message:
+        await update.message.reply_text(text, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+        
     return EDIT_TEXTS_NAVIGATE
 
 
@@ -365,17 +400,20 @@ async def receive_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     context.user_data.pop('message_to_edit_id', None)
     
     parent_path = ".".join(key_to_edit.split('.')[:-1])
-    query.data = f'navigate_{parent_path}'
     
-    query.message = MagicMock()
-    query.message.edit_text = lambda text, reply_markup: context.bot.edit_message_text(
+    # Mock a query object to navigate back
+    mock_query = MagicMock()
+    mock_query.data = f'navigate_{parent_path}'
+    mock_query.answer = lambda: None
+    mock_query.message = MagicMock()
+    mock_query.message.edit_text = lambda text, reply_markup: context.bot.edit_message_text(
         chat_id=update.effective_chat.id, message_id=message_id, text=text, reply_markup=reply_markup
     )
 
     if parent_path:
-        await navigate_text_keys(query, context)
+        await navigate_text_keys(mock_query, context)
     else:
-        await back_to_top_level(query, context)
+        await back_to_top_level(mock_query, context)
         
     return EDIT_TEXTS_NAVIGATE
 
@@ -384,13 +422,53 @@ async def back_to_top_level(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """Handles going back to the top-level key selection."""
     query = update.callback_query
     await query.answer()
-    text = _('messages.edit_texts_select_category')
-    all_texts = translator.get_all_texts()
-    keyboard = []
-    for key in all_texts.keys():
-        keyboard.append([InlineKeyboardButton(key, callback_data=f'navigate_{key}')])
-    keyboard.append([InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_settings')])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(text, reply_markup=reply_markup)
+    await start_text_edit(query, context) # Simply restart the text edit flow
     return EDIT_TEXTS_NAVIGATE
+
+# --- Conversation Handlers ---
+edit_texts_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.edit_texts')}$"), start_text_edit)],
+    states={
+        EDIT_TEXTS_NAVIGATE: [
+            CallbackQueryHandler(navigate_text_keys, pattern='^navigate_'),
+            CallbackQueryHandler(prompt_for_new_value, pattern='^edit_value_'),
+            CallbackQueryHandler(back_to_top_level, pattern='^back_to_top_level$')
+        ],
+        AWAITING_NEW_TEXT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_value)]
+    },
+    fallbacks=[CallbackQueryHandler(back_to_settings, pattern='^back_to_settings$')],
+    map_to_parent={END_CONVERSION: ADMIN_SETTINGS_MENU}
+)
+
+payment_settings_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.payment_settings')}$"), start_payment_settings)],
+    states={
+        PAYMENT_SETTINGS_MENU: [CallbackQueryHandler(prompt_for_new_setting_value, pattern='^edit_setting_')],
+        AWAITING_NEW_SETTING_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_new_setting_value)]
+    },
+    fallbacks=[CallbackQueryHandler(back_to_settings, pattern='^back_to_settings$')],
+    map_to_parent={END_CONVERSION: ADMIN_SETTINGS_MENU}
+)
+
+general_settings_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.general_settings')}$"), start_general_settings)],
+    states={
+        GENERAL_SETTINGS_MENU: [CallbackQueryHandler(toggle_test_account, pattern='^toggle_test_account$')]
+    },
+    fallbacks=[CallbackQueryHandler(back_to_settings, pattern='^back_to_settings$')],
+    map_to_parent={END_CONVERSION: ADMIN_SETTINGS_MENU}
+)
+
+commission_settings_conv = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex(f"^{_('buttons.admin_settings.commission_settings')}$"), start_commission_settings)],
+    states={
+        COMMISSION_SETTINGS_MENU: [
+            CallbackQueryHandler(prompt_for_new_commission_tier, pattern='^add_tier$'),
+            CallbackQueryHandler(delete_commission_tier, pattern='^delete_tier_')
+        ],
+        AWAITING_COMMISSION_THRESHOLD: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_commission_threshold)],
+        AWAITING_COMMISSION_RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_commission_rate)]
+    },
+    fallbacks=[CallbackQueryHandler(back_to_settings, pattern='^back_to_settings$')],
+    map_to_parent={END_CONVERSION: ADMIN_SETTINGS_MENU}
+)

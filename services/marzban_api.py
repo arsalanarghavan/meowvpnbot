@@ -18,7 +18,7 @@ class MarzbanAPI:
         self.base_url = panel.api_base_url
         self.username = panel.username
         self.password = panel.password
-        # FIX: Changed verify=False to verify=True for security
+        # Set verify=True for security against MITM attacks.
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=20.0, verify=True)
         self.access_token = None
 

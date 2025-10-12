@@ -1,8 +1,8 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from database.models.plan import Plan, PlanCategory
 
-def get_test_plan(db: Session) -> Plan:
+def get_test_plan(db: Session) -> Optional[Plan]:
     """Fetches the test plan from the database."""
     return db.query(Plan).filter(Plan.is_test_plan == True).first()
 
@@ -10,7 +10,7 @@ def get_plans_by_category(db: Session, category: PlanCategory) -> List[Plan]:
     """Fetches all plans belonging to a specific category."""
     return db.query(Plan).filter(Plan.category == category, Plan.is_test_plan == False).order_by(Plan.price).all()
 
-def get_plan_by_id(db: Session, plan_id: int) -> Plan:
+def get_plan_by_id(db: Session, plan_id: int) -> Optional[Plan]:
     """Fetches a single plan by its ID."""
     return db.query(Plan).filter(Plan.id == plan_id).first()
 
@@ -32,3 +32,15 @@ def create_plan(db: Session, plan_data: Dict[str, Any]) -> Plan:
     db.commit()
     db.refresh(new_plan)
     return new_plan
+
+def update_plan(db: Session, plan_id: int, update_data: Dict[str, Any]) -> Optional[Plan]:
+    """Updates a plan's details."""
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if plan:
+        for key, value in update_data.items():
+            # Basic validation to ensure value is not empty, can be expanded
+            if value is not None and value != '':
+                setattr(plan, key, value)
+        db.commit()
+        db.refresh(plan)
+    return plan
