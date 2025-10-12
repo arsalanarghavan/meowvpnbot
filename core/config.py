@@ -19,6 +19,11 @@ ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
 # آدرس اتصال به دیتابیس
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# --- Logging Configuration ---
+# آیدی کانالی که می‌خواهید لاگ‌ها و خطاها در آن ارسال شود
+LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID")) if os.getenv("LOG_CHANNEL_ID") else None
+
+
 # --- Marzban Panel API Configuration ---
 # این بخش دیگر به صورت مستقیم استفاده نمی‌شود و اطلاعات پنل‌ها از دیتابیس خوانده می‌شود
 # اما برای حفظ ساختار اولیه، می‌توانید آن‌ها را نگه دارید یا حذف کنید.

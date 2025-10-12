@@ -81,7 +81,7 @@ def get_user_services_keyboard(services: List[Service]) -> InlineKeyboardMarkup:
     """Creates an inline keyboard listing a user's active services."""
     keyboard = []
     for service in services:
-        button_text = service.note or f"سرویس #{service.id}"
+        button_text = service.note or f"{_('words.service')} #{service.id}"
         keyboard.append([InlineKeyboardButton(button_text, callback_data=f'manage_service_{service.id}')])
     return InlineKeyboardMarkup(keyboard)
 

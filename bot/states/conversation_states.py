@@ -2,38 +2,38 @@ from telegram.ext import ConversationHandler
 
 # Defining conversation states as a range of integers
 (
-    # States for Payment
+    # --- Customer Flows ---
+    # Payment
     AWAITING_AMOUNT,
     AWAITING_RECEIPT,
-
-    # States for Purchase Flow
+    # Purchase
     SELECTING_CATEGORY,
     SELECTING_PLAN,
     CONFIRMING_PURCHASE,
     SELECTING_PAYMENT_METHOD,
-
-    # States for Gift Card (Customer)
+    # Gift Card
     AWAITING_GIFT_CODE,
+    # Service Management
+    AWAITING_SERVICE_NOTE,
+    AWAITING_RENEWAL_CONFIRMATION,
+    AWAITING_CANCELLATION_CONFIRMATION,
+    # Online Payment
+    AWAITING_ONLINE_PAYMENT_VERIFICATION,
 
-    # States for Gift Card Creation (Admin)
+    # --- Admin Flows ---
+    # Gift Card Creation
     AWAITING_GIFT_AMOUNT,
     AWAITING_GIFT_COUNT,
-
-    # State for User Management (Admin)
+    # User Management
     AWAITING_USER_ID_FOR_SEARCH,
     AWAITING_AMOUNT_TO_ADD,
-
-    # State for user changing a service note
-    AWAITING_SERVICE_NOTE,
-
-    # State for service renewal
-    AWAITING_RENEWAL_CONFIRMATION,
-
-    # States for Admin Broadcast
+    # Broadcast
     AWAITING_BROADCAST_MESSAGE,
     CONFIRMING_BROADCAST,
 
-    # States for Plan Management
+    # --- Admin Settings Sub-flows ---
+    ADMIN_SETTINGS_MENU,
+    # Plan Management
     PLAN_MANAGEMENT_MENU,
     AWAITING_PLAN_NAME,
     AWAITING_PLAN_CATEGORY,
@@ -42,42 +42,30 @@ from telegram.ext import ConversationHandler
     AWAITING_PLAN_PRICE,
     AWAITING_PLAN_DEVICE_LIMIT,
     CONFIRMING_PLAN_CREATION,
-    SELECTING_PLAN_TO_MANAGE,
-    SELECTING_FIELD_TO_EDIT,
-    AWAITING_NEW_PLAN_VALUE,
-    CONFIRMING_PLAN_DELETION,
-
-
-    # State for Service Cancellation
-    AWAITING_CANCELLATION_CONFIRMATION,
-
-    # States for Panel Management
-    PANEL_MANAGEMENT_MENU,
+    # Panel Management
+    SELECTING_PANEL_TO_MANAGE,
+    MANAGING_SPECIFIC_PANEL,
+    CONFIRMING_PANEL_DELETION,
     AWAITING_PANEL_NAME,
     AWAITING_PANEL_URL,
     AWAITING_PANEL_USERNAME,
     AWAITING_PANEL_PASSWORD,
     CONFIRMING_PANEL_CREATION,
-    SELECTING_PANEL_TO_MANAGE,
     SELECTING_FIELD_TO_EDIT_PANEL,
     AWAITING_NEW_PANEL_VALUE,
-    CONFIRMING_PANEL_DELETION,
-
-    # State for Online Payment
-    AWAITING_ONLINE_PAYMENT_VERIFICATION,
-
-    # States for Admin Settings & Text Editing
-    ADMIN_SETTINGS_MENU,
+    # Text Editing
     EDIT_TEXTS_NAVIGATE,
     AWAITING_NEW_TEXT_VALUE,
-    
-    # States for Payment & General Settings
+    # General & Payment Settings
     PAYMENT_SETTINGS_MENU,
     GENERAL_SETTINGS_MENU,
     AWAITING_NEW_SETTING_VALUE,
+    # Commission Settings
+    COMMISSION_SETTINGS_MENU,
+    AWAITING_COMMISSION_THRESHOLD,
+    AWAITING_COMMISSION_RATE,
 
-
-) = range(47) # Increased the range
+) = range(47) # The range is updated to cover all states
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END
