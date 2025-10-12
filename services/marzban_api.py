@@ -18,7 +18,8 @@ class MarzbanAPI:
         self.base_url = panel.api_base_url
         self.username = panel.username
         self.password = panel.password
-        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=20.0, verify=False) # verify=False for self-signed certs
+        # FIX: Changed verify=False to verify=True for security
+        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=20.0, verify=True)
         self.access_token = None
 
     async def _login(self):
@@ -43,12 +44,12 @@ class MarzbanAPI:
     async def create_user(self, plan: Plan, username: str) -> Dict[str, Any]:
         """Creates a new user in Marzban with a specific username."""
         await self._login()
-        
+
         expire_date = datetime.utcnow() + timedelta(days=plan.duration_days)
         expire_timestamp = int(expire_date.timestamp())
-        
+
         data_limit = plan.traffic_gb * 1024 * 1024 * 1024 if plan.traffic_gb > 0 else 0
-        
+
         user_data = {
             "username": username,
             "proxies": {"vmess": {}, "vless": {}}, # Let Marzban decide defaults
@@ -58,7 +59,7 @@ class MarzbanAPI:
             "ip_limit": plan.device_limit,
             "status": "active"
         }
-        
+
         try:
             response = await self.client.post("/api/user", json=user_data)
             response.raise_for_status()
@@ -86,7 +87,7 @@ class MarzbanAPI:
     async def renew_user(self, service: Service) -> Optional[Dict[str, Any]]:
         """Renews a user's subscription in Marzban."""
         await self._login()
-        
+
         panel_user = await self.get_user(service.username_in_panel)
         if not panel_user:
             logger.warning(f"User {service.username_in_panel} not found on panel {self.base_url} for renewal.")
@@ -94,22 +95,22 @@ class MarzbanAPI:
 
         current_expire_ts = panel_user.get('expire', 0) or 0
         now_ts = int(datetime.utcnow().timestamp())
-        
+
         start_date = datetime.utcfromtimestamp(current_expire_ts) if current_expire_ts > now_ts else datetime.utcnow()
-        
+
         new_expire_date = start_date + timedelta(days=service.plan.duration_days)
         new_expire_ts = int(new_expire_date.timestamp())
 
         new_data_limit = panel_user.get('data_limit', 0) or 0
         if service.plan.traffic_gb > 0:
             new_data_limit += service.plan.traffic_gb * 1024 * 1024 * 1024
-        
+
         update_data = {
             "expire": new_expire_ts,
             "data_limit": new_data_limit,
             "status": "active"
         }
-        
+
         try:
             response = await self.client.put(f"/api/user/{service.username_in_panel}", json=update_data)
             response.raise_for_status()
@@ -128,7 +129,7 @@ class MarzbanAPI:
         except httpx.HTTPStatusError as e:
             logger.error(f"Failed to deactivate user {username} in Marzban panel {self.base_url}: {e.response.text}")
             raise
-    
+
     async def reset_user_uuid(self, username: str) -> Optional[Dict[str, Any]]:
         """Resets a user's UUIDs by regenerating proxies."""
         await self._login()
@@ -172,7 +173,7 @@ class MarzbanAPI:
         for user_details in user_details_list:
             if not user_details or 'subscription_url' not in user_details or not user_details['subscription_url']:
                 continue
-            
+
             sub_url = user_details['subscription_url']
             try:
                 # The actual configs are in the path of the URL, before any query parameters
@@ -184,12 +185,12 @@ class MarzbanAPI:
             except Exception as e:
                 logger.error(f"Could not decode subscription url part '{sub_url}': {e}")
                 continue
-        
+
         if not all_configs:
             return _('messages.error_no_sub_link_found')
 
         combined_configs = "\n".join(all_configs)
         encoded_combined_configs = base64.urlsafe_b64encode(combined_configs.encode('utf-8')).decode('utf-8').rstrip('=')
-        
+
         # Using a generic container format that most clients support
         return f"vless://{encoded_combined_configs}"

@@ -7,7 +7,6 @@ alembic
 psycopg2-binary  # For PostgreSQL, use 'mysqlclient' for MySQL or remove for SQLite
 
 # HTTP Requests for APIs (Marzban, Payment Gateway)
-requests
 httpx
 
 # Environment Variable Management

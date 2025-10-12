@@ -2,9 +2,10 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.translator import _
+from core.config import ADMIN_ID # <-- وارد کردن شناسه ادمین
 from database.engine import SessionLocal
 from database.queries import user_queries, plan_queries, setting_queries
-from services.marzban_api import MarzbanAPI # Assuming a multi-panel setup might be needed
+from services.marzban_api import MarzbanAPI
 from database.models.panel import Panel
 
 async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -19,16 +20,23 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
 
         db_user = user_queries.find_or_create_user(db, user_id=user.id)
-        
+
         if db_user.received_test_account:
             await update.message.reply_text(_('messages.test_account_already_received'))
             return
 
         test_plan = plan_queries.get_test_plan(db)
         if not test_plan:
+            # Inform the user
             await update.message.reply_text(_('messages.test_account_not_configured'))
+            # FIX: Notify the admin that the test plan is not configured
+            if ADMIN_ID:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=_('messages.admin_test_plan_not_set_error') # New message in fa.json
+                )
             return
-            
+
         await update.message.reply_text(_('messages.creating_test_account'))
 
         # --- Multi-panel Logic for Test Account ---
@@ -39,7 +47,7 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         service_username = f"test-{user.id}"
         user_details_list = []
-        
+
         for panel in panels:
             try:
                 api = MarzbanAPI(panel)
@@ -56,7 +64,7 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         # Mark the user as having received the test account
         user_queries.set_user_received_test_account(db, user_id=user.id)
-        
+
         sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
         await update.message.reply_text(_('messages.test_account_created', sub_link=sub_link))
 

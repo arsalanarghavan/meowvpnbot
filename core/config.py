@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from typing import List, Optional
 
 # از پوشه اصلی پروژه، فایل .env را بارگذاری می‌کند
 load_dotenv()
@@ -11,9 +12,23 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 # یوزرنیم ربات تلگرام (بدون @) که برای ساخت لینک بازگشت از درگاه پرداخت لازم است
 BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME")
 
-# آیدی عددی ادمین اصلی که خوانده شده و به عدد صحیح (integer) تبدیل می‌شود
-# در صورتی که مقداری برای آن تعیین نشده باشد، None در نظر گرفته می‌شود
-ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
+# FIX: Support for multiple admin IDs
+def get_admin_ids() -> List[int]:
+    """Reads comma-separated admin IDs from .env and returns a list of integers."""
+    admin_ids_str = os.getenv("ADMIN_ID")
+    if not admin_ids_str:
+        return []
+    try:
+        # Split the string by comma and convert each part to an integer
+        return [int(admin_id.strip()) for admin_id in admin_ids_str.split(',')]
+    except (ValueError, TypeError):
+        return []
+
+# آیدی‌های عددی ادمین‌ها به صورت لیستی از اعداد صحیح
+ADMIN_IDS = get_admin_ids()
+# For backward compatibility, keep a single ADMIN_ID if needed (e.g., for logging)
+ADMIN_ID = ADMIN_IDS[0] if ADMIN_IDS else None
+
 
 # --- Database Configuration ---
 # آدرس اتصال به دیتابیس

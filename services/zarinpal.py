@@ -26,10 +26,13 @@ class Zarinpal:
         if not self.merchant_id:
             print("Zarinpal Merchant ID is not configured.")
             return None, None
-            
-        # The callback URL will point back to the bot with the transaction ID
+
+        # FIX: Dynamically create the callback URL using the bot's username from config
+        if not BOT_USERNAME:
+            print("Bot username is not configured in .env for Zarinpal callback.")
+            return None, None
         callback_url = f"https://t.me/{BOT_USERNAME}?start=verify_{transaction_id}"
-        
+
         payload = {
             "merchant_id": self.merchant_id,
             "amount": amount * 10, # Convert Toman to Rial
@@ -37,14 +40,14 @@ class Zarinpal:
             "callback_url": callback_url,
             "metadata": {"order_id": str(transaction_id)}
         }
-        
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(ZARINPAL_API_REQUEST, json=payload)
                 response.raise_for_status()
                 data = response.json().get('data', {})
                 errors = response.json().get('errors', [])
-                
+
                 if errors or not data:
                     error_code = errors.get('code', 'Unknown') if errors else 'NoData'
                     print(f"Zarinpal request error: Code {error_code}")
@@ -53,7 +56,7 @@ class Zarinpal:
                 authority = data.get('authority')
                 if not authority:
                     return None, None
-                    
+
                 payment_url = ZARINPAL_START_PAY_URL.format(authority=authority)
                 return authority, payment_url
             except httpx.HTTPStatusError as e:
@@ -77,7 +80,7 @@ class Zarinpal:
             "amount": amount * 10, # Convert Toman to Rial
             "authority": authority
         }
-        
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(ZARINPAL_API_VERIFY, json=payload)
