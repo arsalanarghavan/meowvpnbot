@@ -86,42 +86,72 @@ def get_user_services_keyboard(services: List[Service]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 def get_service_management_keyboard(service_id: int) -> InlineKeyboardMarkup:
-    """Creates the detailed management menu for a specific service."""
+    """Creates the detailed management menu for a specific service with better organization."""
+    keyboard = [
+        # دسترسی و اتصال
+        [InlineKeyboardButton(_('buttons.service_manage.access_section'), callback_data=f'section_access_{service_id}')],
+        # مدیریت و تنظیمات
+        [InlineKeyboardButton(_('buttons.service_manage.management_section'), callback_data=f'section_manage_{service_id}')],
+        # اطلاعات و پشتیبانی
+        [InlineKeyboardButton(_('buttons.service_manage.info_section'), callback_data=f'section_info_{service_id}')],
+        # لغو سرویس
+        [InlineKeyboardButton(_('buttons.service_manage.cancel_service'), callback_data=f'cancel_service_{service_id}')],
+        [InlineKeyboardButton(_('buttons.general.back_to_main_menu'), callback_data='back_to_main_menu')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_service_access_section_keyboard(service_id: int) -> InlineKeyboardMarkup:
+    """Keyboard for access and connection section."""
     keyboard = [
         [
             InlineKeyboardButton(_('buttons.service_manage.get_subscription'), callback_data=f'get_sub_{service_id}'),
             InlineKeyboardButton(_('buttons.service_manage.get_qr_code'), callback_data=f'get_qr_{service_id}')
         ],
         [
+            InlineKeyboardButton(_('buttons.service_manage.regenerate_uuid'), callback_data=f'regen_uuid_{service_id}'),
+            InlineKeyboardButton(_('buttons.service_manage.update_servers'), callback_data=f'update_servers_{service_id}')
+        ],
+        [InlineKeyboardButton(_('buttons.general.back'), callback_data=f'manage_service_{service_id}')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_service_management_section_keyboard(service_id: int) -> InlineKeyboardMarkup:
+    """Keyboard for management and settings section."""
+    keyboard = [
+        [
             InlineKeyboardButton(_('buttons.service_manage.renew_service'), callback_data=f'renew_{service_id}'),
             InlineKeyboardButton(_('buttons.service_manage.auto_renew'), callback_data=f'toggle_renew_{service_id}')
         ],
         [
-            InlineKeyboardButton(_('buttons.service_manage.active_connections'), callback_data=f'get_connections_{service_id}'),
-            InlineKeyboardButton(_('buttons.service_manage.update_servers'), callback_data=f'update_servers_{service_id}')
-        ],
-        [
             InlineKeyboardButton(_('buttons.service_manage.change_note'), callback_data=f'edit_note_{service_id}'),
-            InlineKeyboardButton(_('buttons.service_manage.regenerate_uuid'), callback_data=f'regen_uuid_{service_id}')
+            InlineKeyboardButton(_('buttons.service_manage.connection_alerts'), callback_data=f'toggle_alerts_{service_id}')
         ],
-        [
-            InlineKeyboardButton(_('buttons.service_manage.connection_alerts'), callback_data=f'toggle_alerts_{service_id}'),
-            InlineKeyboardButton(_('buttons.service_manage.faq'), callback_data=f'faq_{service_id}')
-        ],
-        [
-            InlineKeyboardButton(_('buttons.service_manage.support'), url=f"https://t.me/{_('config.support_id')}", callback_data=f'support_generic'),
-            InlineKeyboardButton(_('buttons.service_manage.cancel_service'), callback_data=f'cancel_service_{service_id}')
-        ],
-        [InlineKeyboardButton(_('buttons.general.back_to_main_menu'), callback_data='back_to_main_menu')]
+        [InlineKeyboardButton(_('buttons.general.back'), callback_data=f'manage_service_{service_id}')]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def get_user_management_keyboard(user_id: int) -> InlineKeyboardMarkup:
+def get_service_info_section_keyboard(service_id: int) -> InlineKeyboardMarkup:
+    """Keyboard for information and support section."""
+    keyboard = [
+        [InlineKeyboardButton(_('buttons.service_manage.active_connections'), callback_data=f'get_connections_{service_id}')],
+        [InlineKeyboardButton(_('buttons.service_manage.faq'), callback_data=f'faq_generic')],
+        [InlineKeyboardButton(_('buttons.service_manage.support'), url=f"https://t.me/{_('config.support_id')}")],
+        [InlineKeyboardButton(_('buttons.general.back'), callback_data=f'manage_service_{service_id}')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_user_management_keyboard(user_id: int, is_blocked: bool = False) -> InlineKeyboardMarkup:
     """Creates the management menu for a specific user in the admin panel."""
     keyboard = [
         [InlineKeyboardButton(_('buttons.admin_user_manage.view_services'), callback_data=f'admin_view_services_{user_id}')],
         [InlineKeyboardButton(_('buttons.admin_user_manage.add_balance'), callback_data=f'admin_add_balance_{user_id}')],
-        # --- NEW: Added button for changing user role ---
         [InlineKeyboardButton(_('buttons.admin_user_manage.change_role'), callback_data=f'admin_change_role_{user_id}')],
     ]
+    
+    # Add block/unblock button based on current status
+    if is_blocked:
+        keyboard.append([InlineKeyboardButton(_('buttons.admin_user_manage.unblock_user'), callback_data=f'admin_unblock_user_{user_id}')])
+    else:
+        keyboard.append([InlineKeyboardButton(_('buttons.admin_user_manage.block_user'), callback_data=f'admin_block_user_{user_id}')])
+    
     return InlineKeyboardMarkup(keyboard)

@@ -22,30 +22,65 @@ async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         db.close()
 
 async def transaction_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Callback query handler to display user's transaction history."""
+    """Shows transaction history with enhanced details and filter options."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
     db = SessionLocal()
     try:
-        transactions = transaction_queries.get_user_transactions(db, user_id=user_id)
+        # Get filter from callback data if present
+        filter_type = None
+        if '_' in query.data:
+            parts = query.data.split('_')
+            if len(parts) > 2:
+                filter_type = parts[2]
         
-        if not transactions:
-            history_text = _('messages.no_transactions_found')
+        # Apply filter
+        if filter_type and filter_type != 'all':
+            from database.models.transaction import TransactionStatus
+            status_filter = TransactionStatus[filter_type.upper()] if filter_type != 'all' else None
+            transactions = transaction_queries.get_user_transactions_filtered(db, user_id=user_id, status=status_filter, limit=15)
         else:
-            history_text = _('messages.transaction_history_header') + "\n\n"
-            for tx in transactions:
-                status = _(f'transactions.status.{tx.status.value}')
-                tx_type = _(f'transactions.type.{tx.type.value}')
-                # تاریخ را برای نمایش بهتر فرمت می‌کنیم
-                date_str = tx.created_at.strftime('%Y-%m-%d %H:%M')
-                history_text += _('messages.transaction_history_item',
-                                  date=date_str,
-                                  type=tx_type,
-                                  amount=tx.amount,
-                                  status=status)
+            transactions = transaction_queries.get_user_transactions(db, user_id=user_id, limit=15)
+
+        if not transactions:
+            await query.edit_message_text(_('messages.no_transactions_found'))
+            return
+
+        # Calculate summary statistics
+        from database.models.transaction import TransactionStatus
+        total_completed = sum(tx.amount for tx in transactions if tx.status == TransactionStatus.COMPLETED)
+        total_pending = sum(tx.amount for tx in transactions if tx.status == TransactionStatus.PENDING)
+
+        history_text = _('messages.transaction_history_header_enhanced',
+                        total_completed=total_completed,
+                        total_pending=total_pending) + "\n\n"
+        
+        for tx in transactions:
+            tx_type_key = f"transactions.type.{tx.type.name}"
+            status_key = f"transactions.status.{tx.status.name}"
+            history_text += _('messages.transaction_history_item',
+                             date=tx.created_at.strftime('%Y-%m-%d %H:%M'),
+                             type=_(tx_type_key),
+                             amount=tx.amount,
+                             status=_(status_key)) + "\n"
+
+        # Add filter buttons
+        keyboard = [
+            [
+                InlineKeyboardButton(_('buttons.transaction_filter.all'), callback_data='transaction_history_all'),
+                InlineKeyboardButton(_('buttons.transaction_filter.completed'), callback_data='transaction_history_completed')
+            ],
+            [
+                InlineKeyboardButton(_('buttons.transaction_filter.pending'), callback_data='transaction_history_pending'),
+                InlineKeyboardButton(_('buttons.transaction_filter.failed'), callback_data='transaction_history_failed')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(history_text, parse_mode='Markdown', reply_markup=reply_markup)
     finally:
         db.close()
-        
-    await query.edit_message_text(text=history_text)

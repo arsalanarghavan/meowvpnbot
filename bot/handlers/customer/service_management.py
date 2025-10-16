@@ -8,7 +8,9 @@ from core.translator import _
 from database.engine import SessionLocal
 from database.queries import (service_queries, user_queries, transaction_queries, panel_queries)
 from database.models.transaction import TransactionType, TransactionStatus
-from bot.keyboards.inline_keyboards import get_user_services_keyboard, get_service_management_keyboard
+from bot.keyboards.inline_keyboards import (get_user_services_keyboard, get_service_management_keyboard,
+                                            get_service_access_section_keyboard, get_service_management_section_keyboard,
+                                            get_service_info_section_keyboard)
 from services.marzban_api import MarzbanAPI
 from bot.states.conversation_states import (AWAITING_SERVICE_NOTE, AWAITING_RENEWAL_CONFIRMATION,
                                             AWAITING_CANCELLATION_CONFIRMATION, END_CONVERSION)
@@ -87,6 +89,7 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         expire_date = datetime.fromtimestamp(expire_ts).strftime('%Y-%m-%d') if expire_ts else _('words.unknown')
         status_key = f"status.{panel_user.get('status', 'unknown')}"
         auto_renew_status = "✅ " + _('enums.status.enabled') if service.auto_renew else "❌ " + _('enums.status.disabled')
+        alerts_status = "✅ " + _('enums.status.enabled') if service.connection_alerts else "❌ " + _('enums.status.disabled')
 
         text = _('messages.service_details_full',
                  note=service.note or f"{_('words.service')} #{service.id}",
@@ -94,7 +97,8 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                  used_traffic=used_traffic_gb,
                  data_limit=data_limit_gb,
                  expire_date=expire_date,
-                 auto_renew=auto_renew_status)
+                 auto_renew=auto_renew_status,
+                 alerts_status=alerts_status)
 
         reply_markup = get_service_management_keyboard(service_id)
 
@@ -265,6 +269,29 @@ async def back_to_main_menu_from_services(update: Update, context: ContextTypes.
     await query.answer()
     await query.message.delete()
 
+async def show_service_section(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Shows a specific section of service management."""
+    query = update.callback_query
+    await query.answer()
+    
+    data_parts = query.data.split('_')
+    section = data_parts[1]  # access, manage, or info
+    service_id = int(data_parts[2])
+    
+    if section == 'access':
+        text = _('messages.service_access_section')
+        reply_markup = get_service_access_section_keyboard(service_id)
+    elif section == 'manage':
+        text = _('messages.service_management_section')
+        reply_markup = get_service_management_section_keyboard(service_id)
+    elif section == 'info':
+        text = _('messages.service_info_section')
+        reply_markup = get_service_info_section_keyboard(service_id)
+    else:
+        return
+    
+    await query.edit_message_text(text, reply_markup=reply_markup)
+
 async def toggle_auto_renew_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     service_id = int(query.data.split('_')[2])
@@ -287,17 +314,71 @@ async def update_servers_handler(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer(_('messages.updating_servers'), show_alert=False)
     await get_subscription_link(update, context)
 
-# --- Handlers for Unimplemented Buttons ---
+# --- Handlers for Service Enhancement Buttons ---
 async def faq_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the FAQ button click."""
+    """Handles the FAQ button click with comprehensive information."""
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text(_('messages.faq_info'))
+    
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    # Create FAQ categories keyboard
+    keyboard = [
+        [InlineKeyboardButton(_('buttons.faq.connection_issues'), callback_data='faq_connection')],
+        [InlineKeyboardButton(_('buttons.faq.speed_issues'), callback_data='faq_speed')],
+        [InlineKeyboardButton(_('buttons.faq.setup_guide'), callback_data='faq_setup')],
+        [InlineKeyboardButton(_('buttons.faq.subscription_link'), callback_data='faq_subscription')],
+        [InlineKeyboardButton(_('buttons.faq.multi_device'), callback_data='faq_multidevice')],
+        [InlineKeyboardButton(_('buttons.general.back'), callback_data='back_to_faq_main')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.message.reply_text(_('messages.faq_main'), reply_markup=reply_markup)
+
+async def faq_category_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles FAQ category selections."""
+    query = update.callback_query
+    await query.answer()
+    
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    category = query.data.split('_')[1]
+    message_key = f'messages.faq_{category}_details'
+    
+    keyboard = [[InlineKeyboardButton(_('buttons.general.back'), callback_data='faq_generic')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(_(message_key), reply_markup=reply_markup)
 
 async def toggle_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the connection alerts button click."""
+    """Toggles connection alerts for a service."""
     query = update.callback_query
-    await query.answer(_('messages.feature_not_implemented'), show_alert=True)
+    service_id = int(query.data.split('_')[2])
+    
+    db = SessionLocal()
+    try:
+        service = service_queries.get_service_by_id(db, service_id)
+        if not service:
+            await query.answer(_('messages.error_service_not_found'), show_alert=True)
+            return
+        
+        # Toggle alerts
+        service.connection_alerts = not service.connection_alerts
+        db.commit()
+        db.refresh(service)
+        
+        if service.connection_alerts:
+            await query.answer(_('messages.connection_alerts_enabled'), show_alert=True)
+        else:
+            await query.answer(_('messages.connection_alerts_disabled'), show_alert=True)
+    except Exception as e:
+        await log_error(context, e, "toggle_alerts")
+        await query.answer(_('messages.error_general'), show_alert=True)
+    finally:
+        db.close()
+    
+    # Refresh the service menu
+    await show_service_menu(update, context, service_id_override=service_id)
 
 
 # --- Change Note Conversation ---

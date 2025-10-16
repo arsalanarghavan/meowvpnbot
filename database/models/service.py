@@ -20,6 +20,7 @@ class Service(Base):
     start_date = Column(DateTime, nullable=False, default=datetime.utcnow)
     expire_date = Column(DateTime, nullable=False)
     auto_renew = Column(Boolean, nullable=False, default=False)
+    connection_alerts = Column(Boolean, nullable=False, default=True)  # Enable alerts by default
     is_active = Column(Boolean, nullable=False, default=True)
 
     user = relationship("User")

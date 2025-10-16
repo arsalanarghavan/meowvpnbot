@@ -8,7 +8,7 @@ from database.queries import user_queries, service_queries
 from database.models.user import UserRole
 from bot.keyboards.inline_keyboards import get_user_management_keyboard
 from bot.states.conversation_states import (AWAITING_USER_ID_FOR_SEARCH,
-                                            AWAITING_AMOUNT_TO_ADD, AWAITING_ROLE_SELECTION, END_CONVERSATION)
+                                            AWAITING_AMOUNT_TO_ADD, AWAITING_ROLE_SELECTION, END_CONVERSION)
 from core.telegram_logger import log_error
 
 # --- User Search Conversation ---
@@ -38,20 +38,20 @@ async def receive_user_id_and_show_info(update: Update, context: ContextTypes.DE
                            wallet_balance=db_user.wallet_balance,
                            created_at=db_user.created_at.strftime('%Y-%m-%d %H:%M'),
                            is_active="فعال" if db_user.is_active else "مسدود")
-        reply_markup = get_user_management_keyboard(user_id)
+        reply_markup = get_user_management_keyboard(user_id, not db_user.is_active)
         await update.message.reply_text(user_info_text, reply_markup=reply_markup)
-        return END_CONVERSATION
+        return END_CONVERSION
     except Exception as e:
         await log_error(context, e, "receive_user_id_and_show_info")
         await update.message.reply_text(_('messages.error_general'))
-        return END_CONVERSATION
+        return END_CONVERSION
     finally:
         db.close()
 
 async def cancel_user_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels the user search process."""
     await update.message.reply_text(_('messages.operation_cancelled'))
-    return END_CONVERSATION
+    return END_CONVERSION
 
 user_search_conv_handler = ConversationHandler(
     entry_points=[MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.admin_panel.user_management')}$"), start_user_search)],
@@ -125,13 +125,13 @@ async def receive_amount_and_update(update: Update, context: ContextTypes.DEFAUL
         db.close()
 
     context.user_data.clear()
-    return END_CONVERSATION
+    return END_CONVERSION
 
 async def cancel_add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels the add balance process."""
     context.user_data.clear()
     await update.message.reply_text(_('messages.operation_cancelled'))
-    return END_CONVERSATION
+    return END_CONVERSION
 
 add_balance_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_add_balance, pattern='^admin_add_balance_')],
@@ -173,7 +173,7 @@ async def set_user_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     except (IndexError, KeyError):
         await query.edit_message_text(_('messages.error_general'))
         context.user_data.clear()
-        return END_CONVERSATION
+        return END_CONVERSION
 
     db = SessionLocal()
     try:
@@ -186,7 +186,7 @@ async def set_user_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         db.close()
     
     context.user_data.clear()
-    return END_CONVERSATION
+    return END_CONVERSION
 
 async def cancel_change_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancels the role change process."""
@@ -194,7 +194,7 @@ async def cancel_change_role(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     await query.edit_message_text(_('messages.operation_cancelled'))
     context.user_data.clear()
-    return END_CONVERSATION
+    return END_CONVERSION
 
 change_role_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(start_change_role, pattern='^admin_change_role_')],
@@ -203,3 +203,68 @@ change_role_conv_handler = ConversationHandler(
     },
     fallbacks=[CallbackQueryHandler(cancel_change_role, pattern='^cancel_role_change$')]
 )
+
+# --- Block/Unblock User Handlers ---
+async def block_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Blocks a user from using the bot."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = int(query.data.split('_')[3])
+    db = SessionLocal()
+    try:
+        db_user = user_queries.find_user_by_id(db, user_id)
+        if db_user:
+            db_user.is_active = False
+            db.commit()
+            
+            await query.edit_message_text(
+                query.message.text + "\n\n" + _('messages.admin_user_blocked'),
+                reply_markup=get_user_management_keyboard(user_id, True)
+            )
+            
+            # Notify the user
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=_('messages.user_account_blocked')
+                )
+            except Exception:
+                pass  # User may have blocked the bot
+    except Exception as e:
+        await log_error(context, e, "block_user")
+        await query.answer(_('messages.error_general'), show_alert=True)
+    finally:
+        db.close()
+
+async def unblock_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Unblocks a user to allow them to use the bot again."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = int(query.data.split('_')[3])
+    db = SessionLocal()
+    try:
+        db_user = user_queries.find_user_by_id(db, user_id)
+        if db_user:
+            db_user.is_active = True
+            db.commit()
+            
+            await query.edit_message_text(
+                query.message.text + "\n\n" + _('messages.admin_user_unblocked'),
+                reply_markup=get_user_management_keyboard(user_id, False)
+            )
+            
+            # Notify the user
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=_('messages.user_account_unblocked')
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        await log_error(context, e, "unblock_user")
+        await query.answer(_('messages.error_general'), show_alert=True)
+    finally:
+        db.close()

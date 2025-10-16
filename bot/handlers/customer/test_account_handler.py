@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.translator import _
-from core.config import ADMIN_ID # <-- وارد کردن شناسه ادمین
+from core.config import ADMIN_IDS
 from database.engine import SessionLocal
 from database.queries import user_queries, plan_queries, setting_queries
 from services.marzban_api import MarzbanAPI
@@ -29,12 +29,15 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if not test_plan:
             # Inform the user
             await update.message.reply_text(_('messages.test_account_not_configured'))
-            # FIX: Notify the admin that the test plan is not configured
-            if ADMIN_ID:
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text=_('messages.admin_test_plan_not_set_error') # New message in fa.json
-                )
+            # Notify all admins that the test plan is not configured
+            for admin_id in ADMIN_IDS:
+                try:
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=_('messages.admin_test_plan_not_set_error')
+                    )
+                except Exception:
+                    continue
             return
 
         await update.message.reply_text(_('messages.creating_test_account'))

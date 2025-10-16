@@ -38,8 +38,8 @@ def get_admin_main_menu() -> ReplyKeyboardMarkup:
     keyboard = [
         [_('buttons.admin_panel.dashboard'), _('buttons.admin_panel.user_management')],
         [_('buttons.admin_panel.broadcast'), _('buttons.admin_panel.settings')],
-        [_('buttons.admin_panel.confirm_receipts'), _('buttons.admin_panel.backup')],
-        [_('buttons.admin_panel.exit')]
+        [_('buttons.admin_panel.confirm_receipts'), _('buttons.admin_panel.marketer_management')],
+        [_('buttons.admin_panel.backup'), _('buttons.admin_panel.exit')]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 

@@ -71,3 +71,21 @@ def cancel_service_record(db: Session, service_id: int) -> Service:
         db.commit()
         db.refresh(service)
     return service
+
+def get_services_expiring_soon(db: Session, days: int = 3) -> List[Service]:
+    """Returns active services expiring within the specified number of days."""
+    from sqlalchemy import and_
+    future_date = datetime.utcnow() + timedelta(days=days)
+    now = datetime.utcnow()
+    
+    return db.query(Service).filter(
+        and_(
+            Service.is_active == True,
+            Service.expire_date > now,
+            Service.expire_date <= future_date
+        )
+    ).all()
+
+def get_all_active_services(db: Session) -> List[Service]:
+    """Returns all active services in the system."""
+    return db.query(Service).filter(Service.is_active == True).all()

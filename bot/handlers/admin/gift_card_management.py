@@ -2,10 +2,10 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
 from core.translator import _
-from core.config import ADMIN_ID
+from core.config import ADMIN_IDS
 from database.engine import SessionLocal
 from database.queries import gift_card_queries
-from bot.states.conversation_states import AWAITING_GIFT_AMOUNT, AWAITING_GIFT_COUNT, END_CONVERSATION
+from bot.states.conversation_states import AWAITING_GIFT_AMOUNT, AWAITING_GIFT_COUNT, END_CONVERSION
 
 # Entry point for admin
 async def new_gift_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -47,7 +47,7 @@ async def receive_gift_count_and_create(update: Update, context: ContextTypes.DE
             db.close()
             
         context.user_data.clear()
-        return END_CONVERSATION
+        return END_CONVERSION
         
     except (ValueError, TypeError):
         await update.message.reply_text(_('messages.error_invalid_count'))
@@ -57,11 +57,11 @@ async def cancel_gift_creation(update: Update, context: ContextTypes.DEFAULT_TYP
     """Cancels the gift card creation process."""
     context.user_data.clear()
     await update.message.reply_text(_('messages.operation_cancelled'))
-    return END_CONVERSATION
+    return END_CONVERSION
 
 # Define the conversation handler
 new_gift_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('newgift', new_gift_start, filters=filters.User(user_id=ADMIN_ID))],
+    entry_points=[CommandHandler('newgift', new_gift_start, filters=filters.User(user_id=ADMIN_IDS))],
     states={
         AWAITING_GIFT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_gift_amount)],
         AWAITING_GIFT_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_gift_count_and_create)],

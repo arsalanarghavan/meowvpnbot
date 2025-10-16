@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
 from core.translator import _
-from core.config import ADMIN_ID
+from core.config import ADMIN_ID, ADMIN_IDS
 from database.engine import SessionLocal
 from database.models.transaction import TransactionType, TransactionStatus
 from database.queries import (transaction_queries, user_queries, service_queries,
@@ -132,10 +132,15 @@ async def receipt_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         reply_markup = get_admin_receipt_confirmation_keyboard(tx.id)
 
-        # Forward the message (photo or text)
-        await context.bot.forward_message(chat_id=ADMIN_ID, from_chat_id=user.id, message_id=update.message.message_id)
-        # Send the details and confirmation buttons
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup)
+        # Forward the message (photo or text) to all admins
+        for admin_id in ADMIN_IDS:
+            try:
+                await context.bot.forward_message(chat_id=admin_id, from_chat_id=user.id, message_id=update.message.message_id)
+                # Send the details and confirmation buttons
+                await context.bot.send_message(chat_id=admin_id, text=admin_message, reply_markup=reply_markup)
+            except Exception:
+                # Skip if admin has blocked the bot
+                continue
 
         await update.message.reply_text(_('messages.receipt_sent_for_review'))
 

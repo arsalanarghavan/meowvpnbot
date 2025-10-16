@@ -14,14 +14,14 @@ from core.translator import _
 # ===>> Import all handlers and states <<===
 from bot.handlers.customer import (start, info_handlers, wallet_handlers, payment_handlers,
                                    test_account_handler, purchase_flow, service_management,
-                                   gift_card_handler)
+                                   gift_card_handler, earn_money_handler)
 from bot.handlers.marketer import marketer_handlers
 from bot.handlers.admin import (financial_handlers, gift_card_management, panel,
                                 user_management, broadcast, plan_management,
                                 backup_handlers, panel_management, settings_handlers,
-                                payout_handlers)
+                                payout_handlers, marketer_management)
 from bot.states.conversation_states import *
-from bot.jobs import check_and_renew_services
+from bot.jobs import check_and_renew_services, check_services_for_notifications
 
 logger = get_logger(__name__)
 
@@ -70,6 +70,7 @@ def main() -> None:
     # --- Job Scheduling ---
     job_queue = application.job_queue
     job_queue.run_daily(check_and_renew_services, time=time(hour=1, minute=0), name='daily_renewal_check')
+    job_queue.run_daily(check_services_for_notifications, time=time(hour=9, minute=0), name='daily_notification_check')  # Check at 9 AM
 
     admin_filter = filters.User(user_id=ADMIN_IDS)
 
@@ -161,7 +162,8 @@ def main() -> None:
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.dashboard')}$"), panel.show_dashboard))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.backup')}$"), backup_handlers.backup_database))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.exit')}$"), panel.exit_admin_panel))
-    application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.confirm_receipts')}$"), financial_handlers.list_pending_receipts)) # <-- NEW: Receipt list handler
+    application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.confirm_receipts')}$"), financial_handlers.list_pending_receipts))
+    application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.marketer_management')}$"), marketer_management.list_all_marketers))
     
     # --- Customer Commands & Messages ---
     application.add_handler(CommandHandler("start", start.start_command))
@@ -171,6 +173,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.wallet')}$"), wallet_handlers.wallet_menu))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.test_account')}$"), test_account_handler.get_test_account))
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.manage_service')}$"), service_management.list_services))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.earn_money')}$"), earn_money_handler.earn_money_handler))
     
     # --- Marketer Messages ---
     application.add_handler(MessageHandler(filters.TEXT & filters.Regex(f"^{_('buttons.main_menu.marketer_panel')}$"), marketer_handlers.marketer_panel_entry))
@@ -186,6 +189,7 @@ def main() -> None:
     
     # Service Management Callbacks
     application.add_handler(CallbackQueryHandler(service_management.show_service_menu, pattern='^manage_service_'))
+    application.add_handler(CallbackQueryHandler(service_management.show_service_section, pattern='^section_(access|manage|info)_'))
     application.add_handler(CallbackQueryHandler(service_management.get_subscription_link, pattern='^get_sub_'))
     application.add_handler(CallbackQueryHandler(service_management.get_qr_code, pattern='^get_qr_'))
     application.add_handler(CallbackQueryHandler(service_management.get_active_connections, pattern='^get_connections_'))
@@ -194,14 +198,23 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(service_management.update_servers_handler, pattern='^update_servers_'))
     application.add_handler(CallbackQueryHandler(service_management.back_to_main_menu_from_services, pattern='^back_to_main_menu$'))
     
-    # NEW: Handlers for previously unimplemented service buttons
-    application.add_handler(CallbackQueryHandler(service_management.faq_handler, pattern='^faq_'))
+    # Service Enhancement Handlers
+    application.add_handler(CallbackQueryHandler(service_management.faq_handler, pattern='^faq_generic$'))
+    application.add_handler(CallbackQueryHandler(service_management.faq_category_handler, pattern='^faq_(connection|speed|setup|subscription|multidevice)$'))
     application.add_handler(CallbackQueryHandler(service_management.toggle_alerts_handler, pattern='^toggle_alerts_'))
+    
+    # Earn Money / Marketer Promotion Callbacks
+    application.add_handler(CallbackQueryHandler(earn_money_handler.become_marketer_callback, pattern='^become_marketer$'))
+    application.add_handler(CallbackQueryHandler(earn_money_handler.learn_more_callback, pattern='^earn_money_learn_more$'))
+    application.add_handler(CallbackQueryHandler(earn_money_handler.back_to_earn_money_callback, pattern='^back_to_earn_money$'))
+    application.add_handler(CallbackQueryHandler(earn_money_handler.open_marketer_panel_callback, pattern='^open_marketer_panel$'))
 
     # Admin User Management Callbacks
     application.add_handler(CallbackQueryHandler(user_management.view_user_services, pattern='^admin_view_services_'))
-    application.add_handler(CallbackQueryHandler(user_management.start_change_role, pattern='^admin_change_role_')) # <-- NEW: Role change start
-    application.add_handler(CallbackQueryHandler(user_management.set_user_role, pattern='^set_role_')) # <-- NEW: Set role
+    application.add_handler(CallbackQueryHandler(user_management.start_change_role, pattern='^admin_change_role_'))
+    application.add_handler(CallbackQueryHandler(user_management.set_user_role, pattern='^set_role_'))
+    application.add_handler(CallbackQueryHandler(user_management.block_user, pattern='^admin_block_user_'))
+    application.add_handler(CallbackQueryHandler(user_management.unblock_user, pattern='^admin_unblock_user_'))
 
     logger.info("Bot is running...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

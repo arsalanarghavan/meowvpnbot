@@ -10,6 +10,15 @@ def get_user_transactions(db: Session, user_id: int, limit: int = 10) -> List[Tr
                                 .order_by(Transaction.created_at.desc())\
                                 .limit(limit).all()
 
+def get_user_transactions_filtered(db: Session, user_id: int, status: Optional[TransactionStatus] = None, limit: int = 15) -> List[Transaction]:
+    """Fetches transactions for a user with optional status filter."""
+    query = db.query(Transaction).filter(Transaction.user_id == user_id)
+    
+    if status:
+        query = query.filter(Transaction.status == status)
+    
+    return query.order_by(Transaction.created_at.desc()).limit(limit).all()
+
 def create_transaction(db: Session, user_id: int, amount: int, tx_type: TransactionType, plan_id: Optional[int] = None) -> Transaction:
     """Creates a new transaction record in the database."""
     new_tx = Transaction(
@@ -45,3 +54,10 @@ def update_transaction_tracking_code(db: Session, tx_id: int, code: str) -> Tran
         db.commit()
         db.refresh(db_tx)
     return db_tx
+
+def get_pending_card_to_card_transactions(db: Session) -> List[Transaction]:
+    """Fetches all pending card-to-card transactions for admin review."""
+    return db.query(Transaction).filter(
+        Transaction.status == TransactionStatus.PENDING,
+        Transaction.type.in_([TransactionType.WALLET_CHARGE, TransactionType.SERVICE_PURCHASE])
+    ).order_by(Transaction.created_at.desc()).all()

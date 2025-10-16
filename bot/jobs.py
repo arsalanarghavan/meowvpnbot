@@ -8,6 +8,7 @@ from database.queries import service_queries, user_queries, transaction_queries,
 from database.models.transaction import TransactionType, TransactionStatus
 from services.marzban_api import MarzbanAPI
 from core.logger import get_logger
+from bot.notifications import check_and_notify_expiring_services, check_and_notify_low_traffic
 
 logger = get_logger(__name__)
 
@@ -82,3 +83,17 @@ async def check_and_renew_services(context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"An error occurred in the auto-renewal job: {e}", exc_info=True)
     finally:
         db.close()
+
+async def check_services_for_notifications(context: ContextTypes.DEFAULT_TYPE):
+    """Job to check services and send notifications about expiry and low traffic."""
+    logger.info("Running service notification check job...")
+    try:
+        # Check for expiring services
+        await check_and_notify_expiring_services(context.bot)
+        
+        # Check for services with low traffic
+        await check_and_notify_low_traffic(context.bot)
+        
+        logger.info("Service notification check completed.")
+    except Exception as e:
+        logger.error(f"An error occurred in the notification job: {e}", exc_info=True)

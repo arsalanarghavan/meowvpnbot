@@ -2,7 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from core.translator import _
-from core.config import ADMIN_ID
+from core.config import ADMIN_IDS
 from database.engine import SessionLocal
 from database.queries import user_queries, setting_queries
 from bot.keyboards.reply_keyboards import get_marketer_panel_menu, get_marketer_main_menu
@@ -41,7 +41,7 @@ async def get_invite_link(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows the marketer's referral statistics and commission balance."""
+    """Shows the marketer's referral statistics and commission balance with detailed breakdown."""
     user_id = update.effective_user.id
     db = SessionLocal()
     try:
@@ -51,11 +51,19 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         referred_count = user_queries.get_referred_users_count(db, referrer_id=user_id)
         commission_balance = db_user.commission_balance
+        
+        # Get detailed referral statistics
+        active_referrals = user_queries.get_active_referrals_count(db, referrer_id=user_id)
+        total_earned = user_queries.get_total_earned_commission(db, referrer_id=user_id)
+        monthly_earned = user_queries.get_monthly_earned_commission(db, referrer_id=user_id)
 
         await update.message.reply_text(
-            _('messages.marketer_stats',
+            _('messages.marketer_stats_enhanced',
               count=referred_count,
-              commission=commission_balance)
+              active_referrals=active_referrals,
+              commission_balance=commission_balance,
+              total_earned=total_earned,
+              monthly_earned=monthly_earned)
         )
     finally:
         db.close()
@@ -89,7 +97,13 @@ async def request_payout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, reply_markup=reply_markup)
+        # Send payout request to all admins
+        for admin_id in ADMIN_IDS:
+            try:
+                await context.bot.send_message(chat_id=admin_id, text=admin_message, reply_markup=reply_markup)
+            except Exception:
+                # Skip if admin has blocked the bot
+                continue
         
         await update.message.reply_text(_('messages.marketer_payout_request_sent'))
 
