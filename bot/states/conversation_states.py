@@ -66,7 +66,17 @@ from telegram.ext import ConversationHandler
     AWAITING_COMMISSION_THRESHOLD,
     AWAITING_COMMISSION_RATE,
 
-) = range(51) # The range is updated to cover all new states
+    # Card Management (NEW)
+    AWAITING_CARD_NUMBER,
+    AWAITING_CARD_HOLDER,
+    AWAITING_CARD_LIMIT,
+    AWAITING_CARD_PRIORITY,
+    AWAITING_CARD_NOTE,
+    CONFIRMING_CARD_CREATION,
+    SELECTING_CARD_TO_MANAGE,
+    AWAITING_NEW_CARD_VALUE,
+
+) = range(59) # Updated range to cover new card management states
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END

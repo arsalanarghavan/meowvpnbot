@@ -48,7 +48,7 @@ def get_admin_settings_menu() -> ReplyKeyboardMarkup:
     keyboard = [
         [_('buttons.admin_settings.edit_texts'), _('buttons.admin_settings.payment_settings')],
         [_('buttons.admin_settings.plan_management'), _('buttons.admin_settings.panel_management')],
-        [_('buttons.admin_settings.general_settings'), _('buttons.admin_settings.commission_settings')],
-        [_('buttons.admin_panel.back_to_main')]
+        [_('buttons.admin_settings.card_management'), _('buttons.admin_settings.commission_settings')],
+        [_('buttons.admin_settings.general_settings'), _('buttons.admin_panel.back_to_main')]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)

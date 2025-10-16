@@ -97,3 +97,17 @@ async def check_services_for_notifications(context: ContextTypes.DEFAULT_TYPE):
         logger.info("Service notification check completed.")
     except Exception as e:
         logger.error(f"An error occurred in the notification job: {e}", exc_info=True)
+
+async def reset_card_daily_amounts(context: ContextTypes.DEFAULT_TYPE):
+    """Job to reset daily amounts for all card accounts at midnight."""
+    from database.models.queries import card_queries
+    
+    logger.info("Running card accounts daily reset job...")
+    db = SessionLocal()
+    try:
+        count = card_queries.reset_daily_amounts(db)
+        logger.info(f"Reset daily amounts for {count} card accounts.")
+    except Exception as e:
+        logger.error(f"An error occurred in the card reset job: {e}", exc_info=True)
+    finally:
+        db.close()

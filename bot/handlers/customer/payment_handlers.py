@@ -68,30 +68,55 @@ async def receive_charge_amount(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def card_to_card_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the card-to-card payment process, either from purchase or wallet charge."""
+    """Starts the card-to-card payment process with smart card selection."""
     query = update.callback_query
     await query.answer()
 
     user = query.from_user
     db = SessionLocal()
     try:
-        # Get card info from settings
-        card_number = setting_queries.get_setting(db, 'card_number', _('messages.setting_not_set'))
-        card_holder = setting_queries.get_setting(db, 'card_holder', _('messages.setting_not_set'))
-
+        # Determine the amount
         plan = context.user_data.get('selected_plan')
         if plan:
-            # We are in a purchase flow
             amount = plan.price
-            tx = transaction_queries.create_transaction(
-                db, user_id=user.id, amount=amount, tx_type=TransactionType.SERVICE_PURCHASE, plan_id=plan.id
-            )
         else:
-            # This is a wallet charge flow
             amount = context.user_data.get('charge_amount')
             if not amount:
                 await query.edit_message_text(_('messages.error_general'))
                 return END_CONVERSION
+        
+        # Try to get a card from the new card management system
+        from database.models.queries import card_queries
+        selected_card = card_queries.get_available_card_for_amount(db, amount)
+        
+        if selected_card:
+            # Use the smart card system
+            card_number = selected_card.card_number
+            card_holder = selected_card.card_holder
+            
+            # Format card number for display
+            formatted_card = f"{card_number[:4]}-{card_number[4:8]}-{card_number[8:12]}-{card_number[12:16]}"
+            
+            # Store the card_id to update its amount after payment confirmation
+            context.user_data['selected_card_id'] = selected_card.id
+        else:
+            # Fallback to old system (settings)
+            card_number = setting_queries.get_setting(db, 'card_number', None)
+            card_holder = setting_queries.get_setting(db, 'card_holder', None)
+            
+            if not card_number or not card_holder:
+                await query.edit_message_text(_('messages.admin_no_active_card'))
+                return END_CONVERSION
+            
+            formatted_card = card_number
+            context.user_data['selected_card_id'] = None  # No smart card used
+
+        # Create transaction
+        if plan:
+            tx = transaction_queries.create_transaction(
+                db, user_id=user.id, amount=amount, tx_type=TransactionType.SERVICE_PURCHASE, plan_id=plan.id
+            )
+        else:
             tx = transaction_queries.create_transaction(
                 db, user_id=user.id, amount=amount, tx_type=TransactionType.WALLET_CHARGE
             )
@@ -101,7 +126,7 @@ async def card_to_card_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         card_info_text = _('messages.card_to_card_instructions',
                            amount=amount,
                            tx_id=tx.id,
-                           card_number=card_number,
+                           card_number=formatted_card,
                            card_holder=card_holder)
         await query.edit_message_text(text=card_info_text)
 

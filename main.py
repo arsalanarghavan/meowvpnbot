@@ -19,9 +19,9 @@ from bot.handlers.marketer import marketer_handlers
 from bot.handlers.admin import (financial_handlers, gift_card_management, panel,
                                 user_management, broadcast, plan_management,
                                 backup_handlers, panel_management, settings_handlers,
-                                payout_handlers, marketer_management)
+                                payout_handlers, marketer_management, card_management)
 from bot.states.conversation_states import *
-from bot.jobs import check_and_renew_services, check_services_for_notifications
+from bot.jobs import check_and_renew_services, check_services_for_notifications, reset_card_daily_amounts
 
 logger = get_logger(__name__)
 
@@ -70,7 +70,8 @@ def main() -> None:
     # --- Job Scheduling ---
     job_queue = application.job_queue
     job_queue.run_daily(check_and_renew_services, time=time(hour=1, minute=0), name='daily_renewal_check')
-    job_queue.run_daily(check_services_for_notifications, time=time(hour=9, minute=0), name='daily_notification_check')  # Check at 9 AM
+    job_queue.run_daily(check_services_for_notifications, time=time(hour=9, minute=0), name='daily_notification_check')
+    job_queue.run_daily(reset_card_daily_amounts, time=time(hour=0, minute=1), name='daily_card_reset')  # Reset at midnight
 
     admin_filter = filters.User(user_id=ADMIN_IDS)
 
@@ -153,8 +154,10 @@ def main() -> None:
     application.add_handler(gift_card_management.new_gift_conv_handler)
     application.add_handler(user_management.user_search_conv_handler)
     application.add_handler(user_management.add_balance_conv_handler)
-    application.add_handler(user_management.change_role_conv_handler) # <-- NEW: Role management
+    application.add_handler(user_management.change_role_conv_handler)
     application.add_handler(broadcast.broadcast_conv_handler)
+    application.add_handler(card_management.add_card_conv_handler)
+    application.add_handler(card_management.edit_card_field_conv_handler)
     application.add_handler(admin_settings_conv)
 
     # --- Admin Commands & Messages ---
@@ -164,6 +167,7 @@ def main() -> None:
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.exit')}$"), panel.exit_admin_panel))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.confirm_receipts')}$"), financial_handlers.list_pending_receipts))
     application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_panel.marketer_management')}$"), marketer_management.list_all_marketers))
+    application.add_handler(MessageHandler(admin_filter & filters.Regex(f"^{_('buttons.admin_settings.card_management')}$"), card_management.list_card_accounts))
     
     # --- Customer Commands & Messages ---
     application.add_handler(CommandHandler("start", start.start_command))
@@ -215,6 +219,13 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(user_management.set_user_role, pattern='^set_role_'))
     application.add_handler(CallbackQueryHandler(user_management.block_user, pattern='^admin_block_user_'))
     application.add_handler(CallbackQueryHandler(user_management.unblock_user, pattern='^admin_unblock_user_'))
+    
+    # Card Management Callbacks
+    application.add_handler(CallbackQueryHandler(card_management.show_card_management_menu, pattern='^manage_card_'))
+    application.add_handler(CallbackQueryHandler(card_management.toggle_card_status, pattern='^toggle_card_'))
+    application.add_handler(CallbackQueryHandler(card_management.delete_card_confirm, pattern='^delete_card_confirm_'))
+    application.add_handler(CallbackQueryHandler(card_management.delete_card_confirmed, pattern='^delete_card_confirmed_'))
+    application.add_handler(CallbackQueryHandler(card_management.back_to_cards_list, pattern='^back_to_cards_list$'))
 
     logger.info("Bot is running...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)

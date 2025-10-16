@@ -63,6 +63,12 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
         original_message = query.message.text
 
         if action == "confirm_receipt":
+            # Update card account's current_amount if a smart card was used
+            from database.models.queries import card_queries
+            card = card_queries.get_available_card_for_amount(db, tx.amount)
+            if card:
+                card_queries.add_amount_to_card(db, card.id, tx.amount)
+            
             if tx.type == TransactionType.SERVICE_PURCHASE and tx.plan:
                 # --- Multi-Panel Service Creation Logic ---
                 await query.edit_message_text(original_message + "\n\n" + _('messages.admin_creating_service_for_user', user_id=tx.user_id))
