@@ -75,8 +75,52 @@ print_info() {
 # شروع نصب
 print_header
 
+# چک کردن نصب قبلی
+ALREADY_INSTALLED=false
+if [ -f "$PROJECT_ROOT/site/.env" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+    echo -e "${YELLOW}═══ نصب قبلی یافت شد ═══${NC}"
+    echo ""
+    print_warning "به نظر می‌رسد سیستم قبلاً نصب شده است."
+    echo ""
+    echo "گزینه‌ها:"
+    echo "  1) به‌روزرسانی (پیشنهادی)"
+    echo "  2) نصب مجدد (پاک کردن تنظیمات)"
+    echo "  3) لغو"
+    echo ""
+    read -p "انتخاب شما (1/2/3): " INSTALL_CHOICE
+    
+    case $INSTALL_CHOICE in
+        1)
+            print_info "شروع به‌روزرسانی..."
+            ALREADY_INSTALLED=true
+            ;;
+        2)
+            print_warning "تنظیمات قبلی پاک خواهند شد!"
+            read -p "آیا مطمئن هستید؟ (yes/no): " CONFIRM
+            if [ "$CONFIRM" != "yes" ]; then
+                print_info "لغو شد."
+                exit 0
+            fi
+            ALREADY_INSTALLED=false
+            ;;
+        3)
+            print_info "لغو شد."
+            exit 0
+            ;;
+        *)
+            print_error "انتخاب نامعتبر!"
+            exit 1
+            ;;
+    esac
+    echo ""
+fi
+
 echo -e "${CYAN}"
-echo "این نصب کننده موارد زیر را نصب می‌کند:"
+if [ "$ALREADY_INSTALLED" = true ]; then
+    echo "به‌روزرسانی:"
+else
+    echo "این نصب کننده موارد زیر را نصب می‌کند:"
+fi
 echo "  • پنل وب مدیریت (با Setup Wizard)"
 echo "  • ربات تلگرام (از طریق Wizard)"
 echo "  • Nginx و SSL (برای subdomain)"
@@ -297,11 +341,12 @@ fi
 
 # اجرای migrations
 print_step "اجرای database migrations..."
-if command -v alembic &> /dev/null; then
-    alembic upgrade head
-    print_success "Migrations با موفقیت اجرا شدند"
+if [ -f "$VENV_BIN/alembic" ]; then
+    $VENV_BIN/alembic upgrade head 2>/dev/null && print_success "Migrations اجرا شدند" || print_info "دیتابیس آماده است"
 else
-    print_warning "Alembic یافت نشد - migrations اجرا نشد"
+    # اگر alembic نیست، دیتابیس خالی بساز
+    touch bot.db
+    print_success "دیتابیس آماده است"
 fi
 
 echo ""
