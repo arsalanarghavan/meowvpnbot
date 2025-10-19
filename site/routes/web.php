@@ -18,6 +18,8 @@ use App\Http\Controllers\SettingController;
 // Setup Wizard (بدون middleware - فقط اگر فعال باشد)
 Route::prefix('setup')->group(function () {
     Route::get('/', [SetupWizardController::class, 'index'])->name('setup');
+    Route::get('/welcome', [SetupWizardController::class, 'welcome'])->name('setup.welcome');
+    Route::post('/welcome', [SetupWizardController::class, 'saveWelcome'])->name('setup.welcome.save');
     Route::get('/step0', [BackupImportController::class, 'index'])->name('setup.step0');
     Route::get('/step1', [SetupWizardController::class, 'step1'])->name('setup.step1');
     Route::post('/step1', [SetupWizardController::class, 'saveStep1'])->name('setup.step1.save');

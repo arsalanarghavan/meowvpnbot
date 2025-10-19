@@ -92,38 +92,9 @@ PANEL_DOMAIN="${PANEL_SUBDOMAIN}.${MAIN_DOMAIN}"
 echo ""
 print_info "پنل در این آدرس نصب می‌شود: ${GREEN}https://$PANEL_DOMAIN${NC}"
 echo ""
-
-# دریافت اطلاعات ادمین
-echo -e "${YELLOW}═══ اطلاعات ادمین اولیه ═══${NC}"
+print_warning "اطلاعات ادمین (یوزر و پسورد) در Setup Wizard از شما گرفته خواهد شد."
 echo ""
-read -p "نام کاربری ادمین: " ADMIN_USER
 
-while [ -z "$ADMIN_USER" ]; do
-    print_error "نام کاربری نمی‌تواند خالی باشد!"
-    read -p "نام کاربری ادمین: " ADMIN_USER
-done
-
-read -sp "رمز عبور ادمین: " ADMIN_PASS
-echo
-
-while [ -z "$ADMIN_PASS" ]; do
-    print_error "رمز عبور نمی‌تواند خالی باشد!"
-    read -sp "رمز عبور ادمین: " ADMIN_PASS
-    echo
-done
-
-read -sp "تکرار رمز عبور: " ADMIN_PASS_CONFIRM
-echo
-
-if [ "$ADMIN_PASS" != "$ADMIN_PASS_CONFIRM" ]; then
-    print_error "رمزهای عبور مطابقت ندارند!"
-    exit 1
-fi
-
-echo ""
-print_success "اطلاعات ادمین ثبت شد"
-
-echo ""
 read -p "آیا می‌خواهید ادامه دهید؟ (y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -268,7 +239,7 @@ if [ "$SKIP_WEBSITE" != "true" ] && [ -d "$SITE_DIR" ]; then
     composer install --optimize-autoloader --no-interaction
     print_success "Dependencies پنل وب نصب شد"
     
-    # تنظیم .env با اطلاعات دریافتی از کاربر
+    # تنظیم .env
     if [ ! -f ".env" ]; then
         # تولید random secret
         WIZARD_SECRET=$(openssl rand -hex 32)
@@ -286,16 +257,18 @@ LOG_LEVEL=warning
 SESSION_DRIVER=file
 CACHE_DRIVER=file
 
-# Admin Credentials (از کاربر دریافت شده)
-ADMIN_USERNAME=$ADMIN_USER
-ADMIN_PASSWORD=$ADMIN_PASS
+# Admin Credentials (خالی - در Setup Wizard تنظیم می‌شود)
+ADMIN_USERNAME=
+ADMIN_PASSWORD=
 
 # Setup Wizard
 SETUP_WIZARD_ENABLED=true
 SETUP_WIZARD_SECRET=${WIZARD_SECRET}
 BOT_INSTALLED=false
+FIRST_RUN=true
 ENVFILE
-        print_success "فایل .env پنل وب با اطلاعات شما ایجاد شد"
+        print_success "فایل .env پنل وب ایجاد شد"
+        print_info "اطلاعات ادمین در Setup Wizard تنظیم خواهد شد"
     fi
     
     # تولید APP_KEY
@@ -500,18 +473,26 @@ if [ "$WEBSITE_INSTALLED" = "true" ]; then
     echo ""
     
     # راهنمای مرحله بعد
-    echo -e "${YELLOW}📌 مرحله بعدی:${NC}"
+    echo -e "${YELLOW}📌 مرحله بعدی - Setup Wizard:${NC}"
     echo ""
     echo -e "  ${GREEN}1.${NC} مرورگر را باز کنید"
     echo -e "  ${GREEN}2.${NC} به این آدرس بروید:"
     echo ""
     echo -e "     ${BLUE}$PANEL_URL/setup${NC}"
     echo ""
-    echo -e "  ${GREEN}3.${NC} Setup Wizard را تکمیل کنید (4 مرحله):"
+    echo -e "  ${GREEN}3.${NC} ایجاد حساب ادمین:"
+    echo -e "     ▸ یوزرنیم دلخواه شما"
+    echo -e "     ▸ پسورد امن (حداقل 6 کاراکتر)"
+    echo ""
+    echo -e "  ${GREEN}4.${NC} انتخاب کنید:"
+    echo -e "     📦 بازیابی از بکاپ قدیمی (demo.sql)"
+    echo -e "     🚀 نصب جدید (از ابتدا)"
+    echo ""
+    echo -e "  ${GREEN}5.${NC} تکمیل Setup Wizard (4 مرحله):"
     echo -e "     ✓ تنظیمات ربات تلگرام"
     echo -e "     ✓ اطلاعات پنل VPN"
     echo -e "     ✓ تنظیمات پرداخت"
-    echo -e "     ✓ نصب خودکار"
+    echo -e "     ✓ نصب خودکار ربات"
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
@@ -519,23 +500,24 @@ if [ "$WEBSITE_INSTALLED" = "true" ]; then
     # کپی لینک مستقیم
     SETUP_URL="$PANEL_URL/setup"
     
-    echo -e "${GREEN}💡 لینک مستقیم Setup Wizard:${NC}"
+    echo -e "${GREEN}🎯 لینک Setup Wizard (کلیک کنید):${NC}"
     echo ""
     echo -e "   ${BLUE}$SETUP_URL${NC}"
     echo ""
     
     # نمایش QR Code (اگر qrencode نصب باشد)
     if command -v qrencode &> /dev/null; then
-        echo -e "${CYAN}📱 QR Code:${NC}"
+        echo -e "${CYAN}📱 QR Code برای دسترسی سریع:${NC}"
         qrencode -t ANSIUTF8 "$SETUP_URL"
         echo ""
     fi
     
     echo -e "${YELLOW}⚠️  نکات مهم:${NC}"
     echo ""
-    echo "  • هیچ رمز پیش‌فرضی وجود ندارد (امنیت بالا)"
-    echo "  • فقط با اطلاعات وارد شده می‌توانید login کنید"
+    echo "  • یوزر و پسورد در Setup Wizard از شما گرفته می‌شود"
+    echo "  • هیچ رمز پیش‌فرضی وجود ندارد (امنیت 100%)"
     echo "  • Setup Wizard فقط یک بار قابل اجراست"
+    echo "  • می‌توانید demo.sql را Import کنید"
     echo "  • بعد از Wizard، ربات خودکار راه‌اندازی می‌شود"
     echo ""
 else

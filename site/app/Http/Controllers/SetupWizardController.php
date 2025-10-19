@@ -41,7 +41,62 @@ class SetupWizardController extends Controller
             return redirect()->route('dashboard')->with('info', 'Setup Wizard غیرفعال است یا ربات قبلاً نصب شده است.');
         }
 
+        // اگر اولین بار است و هنوز یوزر/پسورد تنظیم نشده
+        if (env('FIRST_RUN', false) && empty(env('ADMIN_USERNAME'))) {
+            return redirect()->route('setup.welcome');
+        }
+
         return view('setup.index');
+    }
+
+    /**
+     * صفحه ایجاد حساب ادمین (اولین بار)
+     */
+    public function welcome()
+    {
+        if (!$this->checkWizardAccess()) {
+            return redirect()->route('dashboard');
+        }
+
+        // اگر قبلاً یوزر تنظیم شده، به صفحه اصلی برو
+        if (!empty(env('ADMIN_USERNAME'))) {
+            return redirect()->route('setup');
+        }
+
+        return view('setup.welcome');
+    }
+
+    /**
+     * ذخیره اطلاعات ادمین
+     */
+    public function saveWelcome(Request $request)
+    {
+        $request->validate([
+            'username' => 'required|alpha_dash|min:3|max:20',
+            'password' => 'required|min:6|confirmed',
+        ], [
+            'username.required' => 'نام کاربری الزامی است.',
+            'username.alpha_dash' => 'فقط حروف انگلیسی، اعداد و _ مجاز است.',
+            'username.min' => 'نام کاربری باید حداقل 3 کاراکتر باشد.',
+            'password.required' => 'رمز عبور الزامی است.',
+            'password.min' => 'رمز عبور باید حداقل 6 کاراکتر باشد.',
+            'password.confirmed' => 'رمزهای عبور مطابقت ندارند.',
+        ]);
+
+        // ذخیره در .env
+        $envPath = base_path('.env');
+        $envContent = file_get_contents($envPath);
+
+        $envContent = preg_replace('/ADMIN_USERNAME=.*/', 'ADMIN_USERNAME=' . $request->username, $envContent);
+        $envContent = preg_replace('/ADMIN_PASSWORD=.*/', 'ADMIN_PASSWORD=' . $request->password, $envContent);
+        $envContent = preg_replace('/FIRST_RUN=true/', 'FIRST_RUN=false', $envContent);
+
+        file_put_contents($envPath, $envContent);
+
+        // پاک کردن cache
+        \Artisan::call('config:clear');
+
+        return redirect()->route('setup')->with('success', 'حساب ادمین با موفقیت ایجاد شد!');
     }
 
     /**
