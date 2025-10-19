@@ -120,8 +120,24 @@ fi
 
 # ایجاد virtual environment
 print_step "ایجاد virtual environment..."
+
+# حذف venv قدیمی اگر خراب است
+if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+    print_warning "Virtual environment خراب است، در حال حذف و ساخت مجدد..."
+    rm -rf venv
+fi
+
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    print_info "ایجاد virtual environment جدید..."
+    python3 -m venv venv --copies
+    
+    if [ $? -ne 0 ]; then
+        print_error "خطا در ایجاد venv"
+        print_info "نصب python3-venv..."
+        sudo apt install -y python3-venv python3-full
+        python3 -m venv venv --copies
+    fi
+    
     print_success "Virtual environment ایجاد شد"
 else
     print_info "Virtual environment از قبل وجود دارد"
@@ -130,49 +146,41 @@ fi
 # فعال‌سازی virtual environment
 print_step "فعال‌سازی virtual environment..."
 
-# دریافت مسیر کامل venv
-VENV_PATH="$PROJECT_ROOT/venv"
+# استفاده از مسیر نسبی
+cd "$PROJECT_ROOT"
+source venv/bin/activate
 
-if [ ! -f "$VENV_PATH/bin/activate" ]; then
-    print_error "Virtual environment یافت نشد!"
+if [ -z "$VIRTUAL_ENV" ]; then
+    print_error "خطا در فعال‌سازی venv!"
     exit 1
 fi
 
-source "$VENV_PATH/bin/activate"
-print_success "Virtual environment فعال شد"
+print_success "Virtual environment فعال شد: $VIRTUAL_ENV"
 
 # نصب dependencies
 print_step "نصب dependencies (ممکن است چند دقیقه طول بکشد)..."
 print_warning "این مرحله 2-5 دقیقه طول می‌کشد، لطفاً صبور باشید..."
 
-# استفاده از مسیر کامل python و pip در venv
-PYTHON_CMD="$VENV_PATH/bin/python3"
-PIP_CMD="$VENV_PATH/bin/pip3"
-
-# اگر python3 نبود، python معمولی رو امتحان کن
-if [ ! -f "$PYTHON_CMD" ]; then
-    PYTHON_CMD="$VENV_PATH/bin/python"
-fi
-
-if [ ! -f "$PIP_CMD" ]; then
-    PIP_CMD="$VENV_PATH/bin/pip"
-fi
-
-# ارتقا pip در venv
-print_info "ارتقا pip..."
-$PYTHON_CMD -m pip install --upgrade pip setuptools wheel --quiet 2>&1
+# ارتقا pip ابتدا
+print_info "ارتقا pip, setuptools, wheel..."
+pip install --upgrade pip setuptools wheel 2>&1 | tail -3
 
 # نصب dependencies
-echo "در حال نصب packages..."
-if $PIP_CMD install -r requirements.txt 2>&1; then
+echo ""
+print_info "نصب requirements.txt..."
+
+if pip install -r requirements.txt; then
     print_success "همه dependencies نصب شدند"
 else
     print_warning "تلاش مجدد بدون cache..."
-    if $PIP_CMD install -r requirements.txt --no-cache-dir 2>&1; then
+    if pip install -r requirements.txt --no-cache-dir; then
         print_success "Dependencies نصب شد"
     else
         print_error "خطا در نصب dependencies"
-        print_info "لاگ خطا را بررسی کنید"
+        echo ""
+        print_info "برای debug:"
+        echo "  source venv/bin/activate"
+        echo "  pip install -r requirements.txt -v"
         exit 1
     fi
 fi
