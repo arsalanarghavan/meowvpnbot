@@ -368,11 +368,24 @@ ENVFILE
     mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache
     chmod -R 775 storage bootstrap/cache
     
+    # تنظیم ownership
+    if command -v www-data &> /dev/null || id -u www-data &> /dev/null 2>&1; then
+        sudo chown -R www-data:www-data storage bootstrap/cache
+        print_success "مجوزهای www-data تنظیم شد"
+    elif command -v nginx &> /dev/null || id -u nginx &> /dev/null 2>&1; then
+        sudo chown -R nginx:nginx storage bootstrap/cache
+        print_success "مجوزهای nginx تنظیم شد"
+    fi
+    
     # پاک‌سازی کش
     php artisan config:clear
     php artisan cache:clear
     php artisan view:clear
     php artisan route:clear
+    
+    # Cache route و config (برای بهتر کار کردن)
+    php artisan route:cache
+    php artisan config:cache
     
     print_success "پنل وب با موفقیت نصب شد"
     
