@@ -1,11 +1,26 @@
 #!/bin/bash
 
 # ==========================================
-# MeowVPN Bot - Automatic Updater
-# به‌روزرسانی خودکار ربات MeowVPN
+# Bot + Website - Automatic Updater
+# به‌روزرسانی خودکار ربات و سایت
 # ==========================================
 
 set -e
+
+# تشخیص مسیر پروژه
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR"
+
+# اگر در /root هستیم، مسیر را به /var/www تغییر بده
+if [[ "$PROJECT_ROOT" == /root/* ]]; then
+    if [ -d "/var/www/meowvpnbot" ]; then
+        PROJECT_ROOT="/var/www/meowvpnbot"
+        cd "$PROJECT_ROOT"
+        print_info "استفاده از مسیر: $PROJECT_ROOT"
+    fi
+fi
+
+SITE_DIR="$PROJECT_ROOT/site"
 
 # رنگ‌ها
 RED='\033[0;31m'
