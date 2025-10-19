@@ -38,26 +38,11 @@ Route::prefix('backup')->group(function () {
     Route::get('/sample', [BackupImportController::class, 'downloadSample'])->name('backup.sample');
 });
 
-// Root redirect - چک کردن وضعیت و هدایت مناسب
+// Root redirect
 Route::get('/', function () {
-    // اگر Setup Wizard فعال است و admin نساخته شده
-    if (env('SETUP_WIZARD_ENABLED', false) && empty(env('ADMIN_USERNAME'))) {
-        return redirect()->route('setup.welcome');
-    }
-
-    // اگر Setup Wizard فعال است و bot نصب نشده
-    if (env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false)) {
-        if (session()->has('user_authenticated')) {
-            return redirect()->route('setup');
-        }
-        return redirect()->route('login');
-    }
-
-    // اگر همه چیز نصب شده
     if (session()->has('user_authenticated')) {
         return redirect()->route('dashboard');
     }
-
     return redirect()->route('login');
 });
 
