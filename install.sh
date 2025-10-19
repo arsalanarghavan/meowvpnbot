@@ -136,17 +136,29 @@ print_success "Virtual environment فعال شد"
 print_step "نصب dependencies (ممکن است چند دقیقه طول بکشد)..."
 print_warning "این مرحله 2-5 دقیقه طول می‌کشد، لطفاً صبور باشید..."
 
-# ارتقا pip
-pip install --upgrade pip setuptools wheel --quiet
+# بررسی اینکه در venv هستیم
+if [ -z "$VIRTUAL_ENV" ]; then
+    print_error "Virtual environment فعال نیست!"
+    source venv/bin/activate
+fi
 
-# نصب dependencies با نمایش پیشرفت
-if pip install -r requirements.txt; then
+# ارتقا pip در venv
+python -m pip install --upgrade pip setuptools wheel --quiet
+
+# نصب dependencies
+echo "در حال نصب packages..."
+if python -m pip install -r requirements.txt; then
     print_success "همه dependencies نصب شدند"
 else
-    print_error "خطا در نصب dependencies"
-    print_info "در حال تلاش مجدد..."
-    pip install -r requirements.txt --no-cache-dir
-    print_success "Dependencies با روش جایگزین نصب شد"
+    print_warning "تلاش مجدد بدون cache..."
+    python -m pip install -r requirements.txt --no-cache-dir
+    if [ $? -eq 0 ]; then
+        print_success "Dependencies نصب شد"
+    else
+        print_error "خطا در نصب dependencies"
+        print_info "لطفاً دستی نصب کنید: source venv/bin/activate && pip install -r requirements.txt"
+        exit 1
+    fi
 fi
 
 # بررسی فایل .env
