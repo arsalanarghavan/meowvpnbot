@@ -129,39 +129,50 @@ fi
 
 # فعال‌سازی virtual environment
 print_step "فعال‌سازی virtual environment..."
-source venv/bin/activate
+
+# دریافت مسیر کامل venv
+VENV_PATH="$PROJECT_ROOT/venv"
+
+if [ ! -f "$VENV_PATH/bin/activate" ]; then
+    print_error "Virtual environment یافت نشد!"
+    exit 1
+fi
+
+source "$VENV_PATH/bin/activate"
 print_success "Virtual environment فعال شد"
 
 # نصب dependencies
 print_step "نصب dependencies (ممکن است چند دقیقه طول بکشد)..."
 print_warning "این مرحله 2-5 دقیقه طول می‌کشد، لطفاً صبور باشید..."
 
-# بررسی اینکه در venv هستیم
-if [ -z "$VIRTUAL_ENV" ]; then
-    print_error "Virtual environment فعال نیست!"
-    source venv/bin/activate
+# استفاده از مسیر کامل python و pip در venv
+PYTHON_CMD="$VENV_PATH/bin/python3"
+PIP_CMD="$VENV_PATH/bin/pip3"
+
+# اگر python3 نبود، python معمولی رو امتحان کن
+if [ ! -f "$PYTHON_CMD" ]; then
+    PYTHON_CMD="$VENV_PATH/bin/python"
 fi
 
-# استفاده از python در venv (که python3 است)
-PYTHON_CMD="$VIRTUAL_ENV/bin/python"
-PIP_CMD="$VIRTUAL_ENV/bin/pip"
+if [ ! -f "$PIP_CMD" ]; then
+    PIP_CMD="$VENV_PATH/bin/pip"
+fi
 
 # ارتقا pip در venv
 print_info "ارتقا pip..."
-$PYTHON_CMD -m pip install --upgrade pip setuptools wheel --quiet
+$PYTHON_CMD -m pip install --upgrade pip setuptools wheel --quiet 2>&1
 
 # نصب dependencies
 echo "در حال نصب packages..."
-if $PIP_CMD install -r requirements.txt; then
+if $PIP_CMD install -r requirements.txt 2>&1; then
     print_success "همه dependencies نصب شدند"
 else
     print_warning "تلاش مجدد بدون cache..."
-    $PIP_CMD install -r requirements.txt --no-cache-dir
-    if [ $? -eq 0 ]; then
+    if $PIP_CMD install -r requirements.txt --no-cache-dir 2>&1; then
         print_success "Dependencies نصب شد"
     else
         print_error "خطا در نصب dependencies"
-        print_info "لطفاً دستی نصب کنید: source venv/bin/activate && pip install -r requirements.txt"
+        print_info "لاگ خطا را بررسی کنید"
         exit 1
     fi
 fi
