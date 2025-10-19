@@ -21,6 +21,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$SCRIPT_DIR"
 SITE_DIR="$PROJECT_ROOT/site"
 
+# تشخیص محیط و مسیر مناسب
+CURRENT_DIR=$(pwd)
+RECOMMENDED_PATH="/var/www/meowvpnbot"
+NEEDS_MOVE=false
+
+# اگر در /root هستیم، باید به /var/www منتقل کنیم
+if [[ "$PROJECT_ROOT" == /root/* ]]; then
+    NEEDS_MOVE=true
+fi
+
 # متغیرهای نصب
 INSTALL_MODE="wizard"  # wizard or manual
 
@@ -73,6 +83,55 @@ echo "  • Nginx و SSL (برای subdomain)"
 echo "  • Systemd service (اجرای خودکار)"
 echo ""
 echo -e "${NC}"
+
+# انتقال به مسیر مناسب اگر نیاز باشد
+if [ "$NEEDS_MOVE" = true ]; then
+    echo -e "${YELLOW}═══ انتقال به مسیر مناسب ═══${NC}"
+    echo ""
+    print_warning "پروژه در /root است. برای امنیت و عملکرد بهتر، به /var/www منتقل می‌شود."
+    echo ""
+    
+    # بکاپ از فایل‌های مهم (در صورت وجود)
+    if [ -f "$PROJECT_ROOT/bot.db" ]; then
+        print_info "بکاپ از دیتابیس..."
+        cp "$PROJECT_ROOT/bot.db" /tmp/bot_backup.db 2>/dev/null || true
+    fi
+    
+    # حذف مسیر قدیمی در /var/www اگر وجود داشت
+    if [ -d "$RECOMMENDED_PATH" ]; then
+        print_warning "پوشه قدیمی در /var/www حذف می‌شود..."
+        sudo rm -rf "$RECOMMENDED_PATH"
+    fi
+    
+    # ایجاد پوشه والد
+    sudo mkdir -p /var/www
+    
+    # انتقال پروژه
+    print_step "انتقال پروژه به $RECOMMENDED_PATH..."
+    sudo cp -r "$PROJECT_ROOT" "$RECOMMENDED_PATH"
+    
+    # بازگرداندن بکاپ
+    if [ -f "/tmp/bot_backup.db" ]; then
+        sudo cp /tmp/bot_backup.db "$RECOMMENDED_PATH/bot.db"
+        rm /tmp/bot_backup.db
+    fi
+    
+    # تنظیم مجوزهای اولیه
+    sudo chown -R www-data:www-data "$RECOMMENDED_PATH"
+    sudo chmod -R 755 "$RECOMMENDED_PATH"
+    
+    print_success "پروژه به $RECOMMENDED_PATH منتقل شد"
+    
+    # به‌روزرسانی متغیرها
+    PROJECT_ROOT="$RECOMMENDED_PATH"
+    SITE_DIR="$PROJECT_ROOT/site"
+    
+    # اجرای مجدد اسکریپت از مسیر جدید
+    print_info "ادامه نصب از مسیر جدید..."
+    cd "$RECOMMENDED_PATH"
+    exec "$RECOMMENDED_PATH/install.sh"
+    exit 0
+fi
 
 # دریافت اطلاعات subdomain
 echo -e "${YELLOW}═══ تنظیمات Subdomain ═══${NC}"
@@ -588,9 +647,9 @@ Documentation=https://github.com/yourusername/meowvpnbot
 [Service]
 Type=simple
 User=www-data
-WorkingDirectory=$CURRENT_DIR
-Environment="PATH=$CURRENT_DIR/venv/bin"
-ExecStart=$CURRENT_DIR/venv/bin/python main.py
+WorkingDirectory=$PROJECT_ROOT
+Environment="PATH=$PROJECT_ROOT/venv/bin"
+ExecStart=$PROJECT_ROOT/venv/bin/python main.py
 
 # Auto-restart settings - همیشه ریستارت شود
 Restart=always
