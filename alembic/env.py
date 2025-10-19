@@ -24,6 +24,7 @@ from database.models import (
     gift_card,
     panel,
     setting,
+    card_account,
 )
 
 # this is the Alembic Config object, which provides

@@ -5,8 +5,9 @@ from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
 from core.translator import _
 from database.engine import SessionLocal
 from database.queries import panel_queries
+from database.models.panel import PanelType
 from bot.states.conversation_states import (
-    SELECTING_PANEL_TO_MANAGE, AWAITING_PANEL_NAME, AWAITING_PANEL_URL,
+    SELECTING_PANEL_TO_MANAGE, AWAITING_PANEL_TYPE, AWAITING_PANEL_NAME, AWAITING_PANEL_URL,
     AWAITING_PANEL_USERNAME, AWAITING_PANEL_PASSWORD, CONFIRMING_PANEL_CREATION,
     MANAGING_SPECIFIC_PANEL, SELECTING_FIELD_TO_EDIT_PANEL, AWAITING_NEW_PANEL_VALUE,
     CONFIRMING_PANEL_DELETION, ADMIN_SETTINGS_MENU
@@ -21,13 +22,14 @@ def get_panels_management_keyboard(db: SessionLocal) -> InlineKeyboardMarkup:
     if panels:
         for panel in panels:
             status_icon = "✅" if panel.is_active else "❌"
-            button_text = f"{status_icon} {panel.name} ({panel.api_base_url})"
+            panel_type_icon = "🔷" if panel.panel_type == PanelType.MARZBAN else "🔶"
+            button_text = f"{status_icon} {panel_type_icon} {panel.name} ({panel.api_base_url})"
             keyboard.append([InlineKeyboardButton(button_text, callback_data=f'manage_panel_{panel.id}')])
     return InlineKeyboardMarkup(keyboard)
 
 # --- Main Menu ---
 async def start_panel_management(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Shows the main menu for Marzban panel management."""
+    """Shows the main menu for VPN panel management (Marzban & Hiddify)."""
     db = SessionLocal()
     try:
         panels = panel_queries.get_all_panels(db)
@@ -129,10 +131,29 @@ async def confirm_delete_panel(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # --- Add Panel Conversation ---
 async def start_add_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the conversation to add a new panel."""
+    """Starts the conversation to add a new panel by first asking for panel type."""
     query = update.callback_query
     await query.answer()
     context.user_data['new_panel'] = {}
+    
+    keyboard = [
+        [InlineKeyboardButton(_('buttons.panel_type.marzban'), callback_data='panel_type_MARZBAN')],
+        [InlineKeyboardButton(_('buttons.panel_type.hiddify'), callback_data='panel_type_HIDDIFY')],
+        [InlineKeyboardButton(_('buttons.general.cancel'), callback_data='cancel_panel_creation')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(_('messages.panel_select_type'), reply_markup=reply_markup)
+    return AWAITING_PANEL_TYPE
+
+async def receive_panel_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receives the panel type selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    panel_type_str = query.data.split('_')[2]  # Extract MARZBAN or HIDDIFY
+    panel_type = PanelType[panel_type_str]
+    context.user_data['new_panel']['type'] = panel_type
+    
     await query.edit_message_text(_('messages.panel_enter_name'))
     return AWAITING_PANEL_NAME
 
@@ -155,8 +176,9 @@ async def receive_panel_password(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['new_panel']['password'] = update.message.text
     
     panel = context.user_data['new_panel']
+    panel_type_name = _(f'enums.panel_type.{panel["type"].value}')
     text = _('messages.panel_confirm_creation',
-             name=panel['name'], url=panel['url'],
+             type=panel_type_name, name=panel['name'], url=panel['url'],
              username=panel['username'])
              
     keyboard = [
@@ -276,6 +298,10 @@ panel_management_conv = ConversationHandler(
         CONFIRMING_PANEL_DELETION: [
             CallbackQueryHandler(confirm_delete_panel, pattern='^confirm_delete_panel$'),
             CallbackQueryHandler(show_panel_management_menu, pattern='^manage_panel_')
+        ],
+        AWAITING_PANEL_TYPE: [
+            CallbackQueryHandler(receive_panel_type, pattern='^panel_type_'),
+            CallbackQueryHandler(cancel_panel_creation, pattern='^cancel_panel_creation$')
         ],
         AWAITING_PANEL_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_panel_name)],
         AWAITING_PANEL_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_panel_url)],

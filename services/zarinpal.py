@@ -1,7 +1,10 @@
 import httpx
 from core.config import ZARINPAL_MERCHANT_ID, BOT_USERNAME
+from core.logger import get_logger
 from database.engine import SessionLocal
 from database.queries import setting_queries
+
+logger = get_logger(__name__)
 
 # Zarinpal API URLs
 ZARINPAL_API_REQUEST = "https://api.zarinpal.com/pg/v4/payment/request.json"
@@ -24,12 +27,12 @@ class Zarinpal:
         Returns the authority and the payment URL, or (None, None) on failure.
         """
         if not self.merchant_id:
-            print("Zarinpal Merchant ID is not configured.")
+            logger.error("Zarinpal Merchant ID is not configured.")
             return None, None
 
         # FIX: Dynamically create the callback URL using the bot's username from config
         if not BOT_USERNAME:
-            print("Bot username is not configured in .env for Zarinpal callback.")
+            logger.error("Bot username is not configured in .env for Zarinpal callback.")
             return None, None
         callback_url = f"https://t.me/{BOT_USERNAME}?start=verify_{transaction_id}"
 
@@ -50,7 +53,7 @@ class Zarinpal:
 
                 if errors or not data:
                     error_code = errors.get('code', 'Unknown') if errors else 'NoData'
-                    print(f"Zarinpal request error: Code {error_code}")
+                    logger.error(f"Zarinpal request error: Code {error_code}")
                     return None, None
 
                 authority = data.get('authority')
@@ -60,10 +63,10 @@ class Zarinpal:
                 payment_url = ZARINPAL_START_PAY_URL.format(authority=authority)
                 return authority, payment_url
             except httpx.HTTPStatusError as e:
-                print(f"HTTP error during Zarinpal payment request: {e.response.text}")
+                logger.error(f"HTTP error during Zarinpal payment request: {e.response.text}")
                 return None, None
             except Exception as e:
-                print(f"An unexpected error occurred during Zarinpal request: {e}")
+                logger.error(f"An unexpected error occurred during Zarinpal request: {e}")
                 return None, None
 
     async def verify_payment(self, amount: int, authority: str) -> (bool, str):
@@ -72,7 +75,7 @@ class Zarinpal:
         Returns the status (True/False) and the reference ID (or error code).
         """
         if not self.merchant_id:
-            print("Zarinpal Merchant ID is not configured.")
+            logger.error("Zarinpal Merchant ID is not configured.")
             return False, "not_configured"
 
         payload = {
@@ -94,12 +97,12 @@ class Zarinpal:
                     return True, str(ref_id)
                 else:
                     error_code = errors.get('code', data.get('code', 'Unknown')) if (errors or data) else "Unknown"
-                    print(f"Zarinpal verification error: Code {error_code}")
+                    logger.error(f"Zarinpal verification error: Code {error_code}")
                     return False, str(error_code)
 
             except httpx.HTTPStatusError as e:
-                print(f"HTTP error during Zarinpal payment verification: {e.response.text}")
+                logger.error(f"HTTP error during Zarinpal payment verification: {e.response.text}")
                 return False, "http_error"
             except Exception as e:
-                print(f"An unexpected error occurred during Zarinpal verification: {e}")
+                logger.error(f"An unexpected error occurred during Zarinpal verification: {e}")
                 return False, "unexpected_error"

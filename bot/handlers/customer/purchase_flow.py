@@ -12,6 +12,7 @@ from bot.keyboards.inline_keyboards import (get_plan_categories_keyboard, get_pl
                                             get_purchase_confirmation_keyboard, get_payment_methods_keyboard)
 from bot.states.conversation_states import (SELECTING_CATEGORY, SELECTING_PLAN, 
                                             CONFIRMING_PURCHASE, SELECTING_PAYMENT_METHOD, END_CONVERSION)
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from bot.logic.commission import award_commission_for_purchase
 from core.telegram_logger import log_error
@@ -137,7 +138,7 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
             if not panel.is_active:
                 continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 user_details = await api.create_user(plan=plan, username=service_username)
                 user_details_list.append(user_details)
             except Exception as e:
@@ -154,8 +155,12 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
             failed_panel_names = ", ".join(failed_panels)
             error_message = f"User service creation partially failed for user {user.id} on panels: {failed_panel_names}"
             # This will be logged to the channel via the main error handler logic.
-            # We can also send a direct, less detailed message.
-            await context.bot.send_message(chat_id=context.bot_data['admin_id'], text=error_message)
+            # We can also send a direct, less detailed message to all admins.
+            for admin_id in context.bot_data.get('admin_ids', []):
+                try:
+                    await context.bot.send_message(chat_id=admin_id, text=error_message)
+                except Exception:
+                    pass  # Ignore if sending to a specific admin fails
 
 
         combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)

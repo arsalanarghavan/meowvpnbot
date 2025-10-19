@@ -3,8 +3,12 @@ from telegram.ext import ContextTypes
 
 from core.translator import _
 from core.config import ADMIN_IDS
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 from database.engine import SessionLocal
-from database.queries import user_queries, plan_queries, setting_queries
+from database.queries import user_queries, plan_queries, setting_queries, panel_queries
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from database.models.panel import Panel
 
@@ -53,12 +57,12 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         for panel in panels:
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 # Use a unique username for test accounts to avoid collision
                 user_details = await api.create_user(plan=test_plan, username=service_username)
                 user_details_list.append(user_details)
             except Exception as e:
-                print(f"Error creating test account on panel {panel.name}: {e}")
+                logger.error(f"Error creating test account on panel {panel.name}: {e}")
                 continue # Try next panel
 
         if not user_details_list:
@@ -73,7 +77,7 @@ async def get_test_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     except Exception as e:
         await update.message.reply_text(_('messages.error_general'))
-        print(f"Error creating test account: {e}")
+        logger.error(f"Error creating test account: {e}")
 
     finally:
         db.close()

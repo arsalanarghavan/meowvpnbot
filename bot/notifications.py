@@ -44,7 +44,7 @@ async def check_and_notify_expiring_services(bot: Bot) -> None:
 
 async def check_and_notify_low_traffic(bot: Bot) -> None:
     """Check for services with low remaining traffic and notify users."""
-    from services.marzban_api import MarzbanAPI
+    from services.panel_api_factory import get_panel_api
     from database.queries import panel_queries
     
     db = SessionLocal()
@@ -65,7 +65,7 @@ async def check_and_notify_low_traffic(bot: Bot) -> None:
                     continue
                     
                 try:
-                    api = MarzbanAPI(panel)
+                    api = get_panel_api(panel)
                     panel_user = await api.get_user(service.username_in_panel)
                     
                     if not panel_user:

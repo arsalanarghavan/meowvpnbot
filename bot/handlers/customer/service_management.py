@@ -11,6 +11,7 @@ from database.models.transaction import TransactionType, TransactionStatus
 from bot.keyboards.inline_keyboards import (get_user_services_keyboard, get_service_management_keyboard,
                                             get_service_access_section_keyboard, get_service_management_section_keyboard,
                                             get_service_info_section_keyboard)
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from bot.states.conversation_states import (AWAITING_SERVICE_NOTE, AWAITING_RENEWAL_CONFIRMATION,
                                             AWAITING_CANCELLATION_CONFIRMATION, END_CONVERSION)
@@ -72,7 +73,7 @@ async def show_service_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for panel in all_panels:
             if panel.is_active:
                 try:
-                    api = MarzbanAPI(panel)
+                    api = get_panel_api(panel)
                     panel_user = await api.get_user(service.username_in_panel)
                     if panel_user:
                         break # Found user on a panel, no need to check others
@@ -131,7 +132,7 @@ async def get_subscription_link(update: Update, context: ContextTypes.DEFAULT_TY
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 user_details = await api.get_user(service.username_in_panel)
                 if user_details:
                     user_details_list.append(user_details)
@@ -167,7 +168,7 @@ async def get_qr_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 user_details = await api.get_user(service.username_in_panel)
                 if user_details:
                     user_details_list.append(user_details)
@@ -209,7 +210,7 @@ async def get_active_connections(update: Update, context: ContextTypes.DEFAULT_T
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 panel_user = await api.get_user(service.username_in_panel)
                 if panel_user and panel_user.get('online_at'):
                     for conn in panel_user['online_at']:
@@ -245,7 +246,7 @@ async def regenerate_uuid(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 new_panel_user = await api.reset_user_uuid(service.username_in_panel)
                 if new_panel_user:
                     user_details_list.append(new_panel_user)
@@ -467,7 +468,7 @@ async def confirm_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 await api.renew_user(service)
                 success_count += 1
             except Exception as e:
@@ -542,7 +543,7 @@ async def confirm_cancellation(update: Update, context: ContextTypes.DEFAULT_TYP
         for panel in panels:
             if not panel.is_active: continue
             try:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 await api.deactivate_user(service.username_in_panel)
             except Exception as e:
                 await log_error(context, e, f"Failed to deactivate user on panel {panel.name}")

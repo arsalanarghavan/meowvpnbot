@@ -14,6 +14,7 @@ def create_panel(db: Session, panel_data: Dict[str, Any]) -> Panel:
     """Creates a new panel in the database."""
     new_panel = Panel(
         name=panel_data['name'],
+        panel_type=panel_data['type'],
         api_base_url=panel_data['url'],
         username=panel_data['username'],
         password=panel_data['password']

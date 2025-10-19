@@ -5,7 +5,7 @@ import asyncio
 from core.translator import _
 from database.engine import SessionLocal
 from database.queries import user_queries, panel_queries
-from services.marzban_api import MarzbanAPI
+from services.panel_api_factory import get_panel_api
 from bot.keyboards.reply_keyboards import get_admin_main_menu, get_customer_main_menu, get_admin_settings_menu
 from core.telegram_logger import log_error
 
@@ -49,7 +49,7 @@ async def show_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         tasks = []
         for panel in panels:
             if panel.is_active:
-                api = MarzbanAPI(panel)
+                api = get_panel_api(panel)
                 tasks.append(api.get_all_users_from_panel())
                 tasks.append(api.get_system_stats())
 

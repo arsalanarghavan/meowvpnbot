@@ -1,5 +1,11 @@
-from sqlalchemy import (Column, Integer, String, Boolean)
+from sqlalchemy import (Column, Integer, String, Boolean, Enum as SQLEnum)
 from database.engine import Base
+import enum
+
+class PanelType(enum.Enum):
+    """نوع پنل VPN"""
+    MARZBAN = "marzban"
+    HIDDIFY = "hiddify"
 
 class Panel(Base):
     __tablename__ = 'panels'
@@ -8,6 +14,9 @@ class Panel(Base):
     
     # نام پنل برای شناسایی توسط ادمین (مثال: پنل اصلی آلمان)
     name = Column(String(100), nullable=False)
+    
+    # نوع پنل (Marzban یا Hiddify)
+    panel_type = Column(SQLEnum(PanelType), nullable=False, default=PanelType.MARZBAN)
     
     # آدرس اصلی پنل برای ارسال درخواست‌های API
     api_base_url = Column(String(255), nullable=False, unique=True)

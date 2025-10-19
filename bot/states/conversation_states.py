@@ -44,6 +44,7 @@ from telegram.ext import ConversationHandler
     SELECTING_PANEL_TO_MANAGE,
     MANAGING_SPECIFIC_PANEL,
     CONFIRMING_PANEL_DELETION,
+    AWAITING_PANEL_TYPE,
     AWAITING_PANEL_NAME,
     AWAITING_PANEL_URL,
     AWAITING_PANEL_USERNAME,
@@ -76,7 +77,7 @@ from telegram.ext import ConversationHandler
     SELECTING_CARD_TO_MANAGE,
     AWAITING_NEW_CARD_VALUE,
 
-) = range(59) # Updated range to cover new card management states
+) = range(60) # Updated range to cover new panel type state
 
 # A constant to end the conversation from anywhere
 END_CONVERSION = ConversationHandler.END

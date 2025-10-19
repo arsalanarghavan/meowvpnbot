@@ -5,6 +5,9 @@ from telegram.ext import ContextTypes
 
 from core.translator import _
 from core.config import DATABASE_URL
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 async def backup_database(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the backup database command for the admin, supporting SQLite and PostgreSQL."""
@@ -65,7 +68,7 @@ async def backup_database(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if process.returncode != 0:
                 error_message = stderr.decode().strip()
                 await update.message.reply_text(_('messages.error_general_with_details', error=error_message))
-                print(f"pg_dump failed: {error_message}")
+                logger.error(f"pg_dump failed: {error_message}")
                 return
 
             # Send the backup file
@@ -83,4 +86,4 @@ async def backup_database(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     except Exception as e:
         await update.message.reply_text(_('messages.error_general_with_details', error=str(e)))
-        print(f"Backup failed: {e}")
+        logger.error(f"Backup failed: {e}")

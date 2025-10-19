@@ -4,6 +4,9 @@ from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filt
 
 from core.translator import _
 from core.config import ADMIN_ID, ADMIN_IDS
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 from database.engine import SessionLocal
 from database.models.transaction import TransactionType, TransactionStatus
 from database.queries import (transaction_queries, user_queries, service_queries,
@@ -15,6 +18,7 @@ from bot.keyboards.inline_keyboards import (get_payment_methods_keyboard,
 from bot.states.conversation_states import (AWAITING_AMOUNT, AWAITING_RECEIPT,
                                             AWAITING_ONLINE_PAYMENT_VERIFICATION, END_CONVERSION)
 from services.zarinpal import Zarinpal
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from bot.logic.commission import award_commission_for_purchase # <-- ایمپورت جدید
 
@@ -266,11 +270,11 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
 
                 for panel in panels:
                     try:
-                        api = MarzbanAPI(panel)
+                        api = get_panel_api(panel)
                         user_details = await api.create_user(plan=tx.plan, username=service_username)
                         user_details_list.append(user_details)
                     except Exception as e:
-                        print(f"Failed to create user on panel {panel.name} during online payment: {e}")
+                        logger.error(f"Failed to create user on panel {panel.name} during online payment: {e}")
                 
                 if not user_details_list:
                     await query.edit_message_text(_('messages.error_all_panels_failed'))

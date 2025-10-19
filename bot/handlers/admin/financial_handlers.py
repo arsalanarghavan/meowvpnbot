@@ -6,6 +6,7 @@ from core.translator import _
 from database.engine import SessionLocal
 from database.models.transaction import TransactionStatus, TransactionType
 from database.queries import (transaction_queries, user_queries, service_queries, panel_queries)
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from bot.logic.commission import award_commission_for_purchase
 from core.telegram_logger import log_error
@@ -83,7 +84,7 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
 
                 for panel in panels:
                     try:
-                        api = MarzbanAPI(panel)
+                        api = get_panel_api(panel)
                         user_details = await api.create_user(plan=tx.plan, username=service_username)
                         user_details_list.append(user_details)
                     except Exception as e:

@@ -6,6 +6,7 @@ from core.translator import _
 from database.engine import SessionLocal
 from database.queries import service_queries, user_queries, transaction_queries, panel_queries
 from database.models.transaction import TransactionType, TransactionStatus
+from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from core.logger import get_logger
 from bot.notifications import check_and_notify_expiring_services, check_and_notify_low_traffic
@@ -45,12 +46,12 @@ async def check_and_renew_services(context: ContextTypes.DEFAULT_TYPE):
                     logger.warning(f"User {user.user_id} has blocked the bot. Cannot send auto-renew failure message.")
                 continue
 
-            # 2. Renew on all Marzban panels
+            # 2. Renew on all VPN panels (Marzban/Hiddify)
             logger.info(f"Attempting to auto-renew service {service.id} for user {user.user_id}.")
             success_count = 0
             for panel in panels:
                 try:
-                    api = MarzbanAPI(panel)
+                    api = get_panel_api(panel)
                     await api.renew_user(service)
                     success_count += 1
                 except Exception as e:
