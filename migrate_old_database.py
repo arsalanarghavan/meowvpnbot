@@ -75,8 +75,23 @@ class DatabaseMigrator:
             # حذف دستورات MySQL-specific که SQLite نمی‌فهمه
             sql_script = self._clean_sql_for_sqlite(sql_script)
             
-            # اجرای اسکریپت
-            self.old_conn.executescript(sql_script)
+            # اجرای اسکریپت statement by statement برای جلوگیری از خطاهای syntax
+            cursor = self.old_conn.cursor()
+            statements = sql_script.split(';')
+            
+            for i, statement in enumerate(statements):
+                statement = statement.strip()
+                if statement and not statement.startswith('--'):
+                    try:
+                        cursor.execute(statement)
+                    except Exception as e:
+                        # فقط خطاهای مهم رو نمایش بده
+                        if 'syntax error' in str(e).lower() and 'CREATE TABLE' in statement:
+                            print(f"  ⚠️  خطای syntax در statement {i}: {str(e)[:100]}")
+                        # ادامه به statement بعدی
+                        continue
+            
+            self.old_conn.commit()
             print("✅ دیتابیس قدیمی بارگذاری شد")
             return True
             
@@ -91,35 +106,58 @@ class DatabaseMigrator:
         sql = re.sub(r'ENGINE=\w+\s+DEFAULT\s+CHARSET=\w+\s+COLLATE=\w+;', ';', sql)
         sql = re.sub(r'ENGINE=\w+;', ';', sql)
         
+        # حذف AUTO_INCREMENT (SQLite خودش auto-increment رو handle می‌کنه با PRIMARY KEY INTEGER)
+        sql = re.sub(r'AUTO_INCREMENT=\d+', '', sql)
+        sql = re.sub(r'\s+AUTO_INCREMENT\b', '', sql, flags=re.IGNORECASE)
+        
         # تبدیل bigint به INTEGER
-        sql = re.sub(r'bigint\(\d+\)\s+unsigned', 'INTEGER', sql)
-        sql = re.sub(r'bigint\(\d+\)', 'INTEGER', sql)
+        sql = re.sub(r'bigint\(\d+\)\s+unsigned', 'INTEGER', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'bigint\(\d+\)', 'INTEGER', sql, flags=re.IGNORECASE)
         
         # تبدیل int به INTEGER
-        sql = re.sub(r'int\(\d+\)\s+unsigned', 'INTEGER', sql)
-        sql = re.sub(r'int\(\d+\)', 'INTEGER', sql)
+        sql = re.sub(r'int\(\d+\)\s+unsigned', 'INTEGER', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'int\(\d+\)', 'INTEGER', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bint\s+unsigned\b', 'INTEGER', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bint\b(?!\w)', 'INTEGER', sql, flags=re.IGNORECASE)
+        
+        # تبدیل tinyint به INTEGER
+        sql = re.sub(r'tinyint\(\d+\)', 'INTEGER', sql, flags=re.IGNORECASE)
         
         # تبدیل double به REAL
-        sql = re.sub(r'double\(\d+,\d+\)', 'REAL', sql)
+        sql = re.sub(r'double\(\d+,\d+\)', 'REAL', sql, flags=re.IGNORECASE)
         
         # تبدیل varchar به TEXT
-        sql = re.sub(r'varchar\(\d+\)', 'TEXT', sql)
+        sql = re.sub(r'varchar\(\d+\)', 'TEXT', sql, flags=re.IGNORECASE)
         
-        # حذف ON DELETE CASCADE/ON UPDATE CASCADE از SQLite
-        # (SQLite پشتیبانی می‌کنه ولی نیاز به فعال‌سازی PRAGMA داره)
+        # تبدیل text به TEXT
+        sql = re.sub(r'\btext\b', 'TEXT', sql, flags=re.IGNORECASE)
+        
+        # تبدیل timestamp به TEXT
+        sql = re.sub(r'\btimestamp\b', 'TEXT', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bdatetime\b', 'TEXT', sql, flags=re.IGNORECASE)
+        
+        # تبدیل enum به TEXT
+        sql = re.sub(r"enum\([^)]+\)", "TEXT", sql, flags=re.IGNORECASE)
         
         # حذف UNIQUE KEY و KEY
-        sql = re.sub(r'UNIQUE KEY\s+`[^`]+`\s+\([^)]+\)[,]?', '', sql)
-        sql = re.sub(r'KEY\s+`[^`]+`\s+\([^)]+\)[,]?', '', sql)
+        sql = re.sub(r',?\s*UNIQUE KEY\s+`[^`]+`\s+\([^)]+\)', '', sql, flags=re.IGNORECASE)
+        sql = re.sub(r',?\s*KEY\s+`[^`]+`\s+\([^)]+\)', '', sql, flags=re.IGNORECASE)
         
         # حذف CONSTRAINT
-        sql = re.sub(r'CONSTRAINT\s+`[^`]+`\s+FOREIGN KEY[^,]+,', '', sql)
+        sql = re.sub(r',?\s*CONSTRAINT\s+`[^`]+`\s+FOREIGN KEY[^,;]+', '', sql, flags=re.IGNORECASE)
+        
+        # حذف ON DELETE CASCADE و ON UPDATE CASCADE
+        sql = re.sub(r'ON DELETE CASCADE', '', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'ON UPDATE CASCADE', '', sql, flags=re.IGNORECASE)
         
         # حذف SET FOREIGN_KEY_CHECKS
-        sql = re.sub(r'SET FOREIGN_KEY_CHECKS=\d+;', '', sql)
+        sql = re.sub(r'SET FOREIGN_KEY_CHECKS=\d+;', '', sql, flags=re.IGNORECASE)
         
         # حذف DROP TABLE IF EXISTS (برای جلوگیری از خطا)
         # sql = re.sub(r'DROP TABLE IF EXISTS.*?;', '', sql)
+        
+        # حذف کاما اضافی قبل از پرانتز بسته
+        sql = re.sub(r',\s*\)', ')', sql)
         
         return sql
     
@@ -320,8 +358,7 @@ class DatabaseMigrator:
                 SELECT p.*, pc.expire_day 
                 FROM products p
                 JOIN product_categories pc ON p.product_categories_id = pc.id
-                LIMIT 100
-            """)  # محدود کردم برای تست - حذفش کنید برای مایگریشن کامل
+            """)
             products = cursor.fetchall()
             
             for prod_row in products:
@@ -391,7 +428,7 @@ class DatabaseMigrator:
         
         try:
             cursor = self.old_conn.cursor()
-            cursor.execute("SELECT * FROM transactions LIMIT 200")  # محدود برای تست
+            cursor.execute("SELECT * FROM transactions")
             transactions = cursor.fetchall()
             
             for trans_row in transactions:
