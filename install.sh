@@ -251,58 +251,82 @@ echo -e "${PURPLE}║         نصب پنل وب مدیریت (Website Panel)   
 echo -e "${PURPLE}╚═══════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# بررسی PHP
-print_step "بررسی PHP..."
+# بررسی و نصب PHP
+print_step "بررسی و نصب PHP..."
 if ! command -v php &> /dev/null; then
-    print_warning "PHP نصب نشده است!"
-    read -p "آیا می‌خواهید PHP نصب شود؟ (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_step "نصب PHP..."
-        sudo apt update
-        sudo apt install -y php php-cli php-mbstring php-xml php-curl php-zip php-sqlite3
-        print_success "PHP نصب شد"
-    else
-        print_warning "نصب پنل وب رد شد - فقط ربات نصب می‌شود"
-        SKIP_WEBSITE=true
-    fi
+    print_info "نصب PHP 8.2 و extensions..."
+    sudo apt update
+    sudo apt install -y software-properties-common
+    sudo add-apt-repository ppa:ondrej/php -y
+    sudo apt update
+    sudo apt install -y php8.2 php8.2-cli php8.2-mbstring php8.2-xml php8.2-curl php8.2-zip php8.2-sqlite3 php8.2-fpm
+    
+    # تنظیم PHP 8.2 به عنوان پیش‌فرض
+    sudo update-alternatives --set php /usr/bin/php8.2
+    
+    print_success "PHP 8.2 نصب شد"
 else
     PHP_VERSION=$(php -v | head -n 1 | cut -d " " -f 2 | cut -d "." -f 1,2)
-    print_success "PHP $PHP_VERSION یافت شد"
-fi
-
-# بررسی Composer
-if [ "$SKIP_WEBSITE" != "true" ]; then
-    print_step "بررسی Composer..."
-    if ! command -v composer &> /dev/null; then
-        print_warning "Composer نصب نشده است!"
-        read -p "آیا می‌خواهید Composer نصب شود؟ (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            print_step "نصب Composer..."
-            cd /tmp
-            php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-            php composer-setup.php
-            sudo mv composer.phar /usr/local/bin/composer
-            php -r "unlink('composer-setup.php');"
-            cd "$PROJECT_ROOT"
-            print_success "Composer نصب شد"
-        else
-            print_warning "نصب پنل وب رد شد"
-            SKIP_WEBSITE=true
-        fi
-    else
-        print_success "Composer یافت شد"
+    print_info "PHP $PHP_VERSION یافت شد"
+    
+    # اگر PHP 8.3 است، نصب PHP 8.2
+    if [[ "$PHP_VERSION" == "8.3" ]]; then
+        print_warning "PHP 8.3 با پروژه سازگار نیست، نصب PHP 8.2..."
+        sudo apt install -y software-properties-common
+        sudo add-apt-repository ppa:ondrej/php -y
+        sudo apt update
+        sudo apt install -y php8.2 php8.2-cli php8.2-mbstring php8.2-xml php8.2-curl php8.2-zip php8.2-sqlite3 php8.2-fpm
+        sudo update-alternatives --set php /usr/bin/php8.2
+        print_success "PHP 8.2 نصب و فعال شد"
     fi
 fi
 
-# نصب پنل وب
-if [ "$SKIP_WEBSITE" != "true" ] && [ -d "$SITE_DIR" ]; then
+PHP_VERSION=$(php -v | head -n 1 | cut -d " " -f 2 | cut -d "." -f 1,2)
+print_success "PHP $PHP_VERSION آماده است"
+
+# بررسی و نصب Composer
+print_step "بررسی و نصب Composer..."
+if ! command -v composer &> /dev/null; then
+    print_info "نصب Composer..."
+    cd /tmp
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+    php composer-setup.php --quiet
+    sudo mv composer.phar /usr/local/bin/composer
+    php -r "unlink('composer-setup.php');"
+    cd "$PROJECT_ROOT"
+    print_success "Composer نصب شد"
+else
+    print_success "Composer یافت شد"
+fi
+
+# نصب dependencies پنل وب
+if [ -d "$SITE_DIR" ]; then
     print_step "نصب dependencies پنل وب..."
     cd "$SITE_DIR"
     
-    composer install --optimize-autoloader --no-interaction
-    print_success "Dependencies پنل وب نصب شد"
+    # حذف composer.lock برای compatibility با PHP 8.2
+    if [ -f "composer.lock" ]; then
+        print_info "به‌روزرسانی composer.lock برای PHP 8.2..."
+        rm composer.lock
+    fi
+    
+    # نصب با composer update
+    export COMPOSER_ALLOW_SUPERUSER=1
+    composer update --optimize-autoloader --no-interaction --quiet
+    
+    if [ $? -eq 0 ]; then
+        print_success "Dependencies پنل وب نصب شد"
+    else
+        print_error "خطا در نصب dependencies"
+        print_info "تلاش مجدد..."
+        composer install --optimize-autoloader --no-interaction
+        
+        if [ $? -ne 0 ]; then
+            print_error "نصب ناموفق بود"
+            exit 1
+        fi
+        print_success "Dependencies نصب شد"
+    fi
     
     # تنظیم .env
     if [ ! -f ".env" ]; then
