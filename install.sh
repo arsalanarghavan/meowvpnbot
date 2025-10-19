@@ -142,16 +142,21 @@ if [ -z "$VIRTUAL_ENV" ]; then
     source venv/bin/activate
 fi
 
+# استفاده از python در venv (که python3 است)
+PYTHON_CMD="$VIRTUAL_ENV/bin/python"
+PIP_CMD="$VIRTUAL_ENV/bin/pip"
+
 # ارتقا pip در venv
-python -m pip install --upgrade pip setuptools wheel --quiet
+print_info "ارتقا pip..."
+$PYTHON_CMD -m pip install --upgrade pip setuptools wheel --quiet
 
 # نصب dependencies
 echo "در حال نصب packages..."
-if python -m pip install -r requirements.txt; then
+if $PIP_CMD install -r requirements.txt; then
     print_success "همه dependencies نصب شدند"
 else
     print_warning "تلاش مجدد بدون cache..."
-    python -m pip install -r requirements.txt --no-cache-dir
+    $PIP_CMD install -r requirements.txt --no-cache-dir
     if [ $? -eq 0 ]; then
         print_success "Dependencies نصب شد"
     else
