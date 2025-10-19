@@ -118,84 +118,92 @@ else
     print_success "pip آماده است"
 fi
 
+# مطمئن شدن از نصب python3-venv
+if ! dpkg -l | grep -q python3-venv; then
+    print_step "نصب python3-venv و python3-full..."
+    sudo apt update
+    sudo apt install -y python3-venv python3-full python3-dev build-essential
+    print_success "پیش‌نیازهای Python نصب شد"
+fi
+
 # ایجاد virtual environment
 print_step "ایجاد virtual environment..."
 
-# حذف venv قدیمی اگر خراب است
-if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
-    print_warning "Virtual environment خراب است، در حال حذف و ساخت مجدد..."
-    rm -rf venv
+# اطمینان از حذف venv خراب
+if [ -d "venv" ]; then
+    # چک کردن سلامت venv
+    if [ ! -f "venv/bin/activate" ] || [ ! -f "venv/bin/python" ] && [ ! -f "venv/bin/python3" ]; then
+        print_warning "Virtual environment خراب یا ناقص است، در حال حذف..."
+        rm -rf venv
+    fi
 fi
 
 if [ ! -d "venv" ]; then
     print_info "ایجاد virtual environment جدید..."
-    python3 -m venv venv --copies
     
-    if [ $? -ne 0 ]; then
-        print_error "خطا در ایجاد venv"
-        print_info "نصب python3-venv..."
-        sudo apt install -y python3-venv python3-full
-        python3 -m venv venv --copies
+    # ساخت venv
+    python3 -m venv venv
+    
+    if [ $? -ne 0 ] || [ ! -f "venv/bin/activate" ]; then
+        print_error "خطا در ایجاد venv!"
+        exit 1
     fi
     
     print_success "Virtual environment ایجاد شد"
 else
-    print_info "Virtual environment از قبل وجود دارد"
+    print_info "Virtual environment معتبر موجود است"
 fi
 
-# فعال‌سازی virtual environment
-print_step "فعال‌سازی virtual environment..."
+# نصب dependencies
+print_step "نصب dependencies Python (2-5 دقیقه)..."
+print_warning "لطفاً صبور باشید، این مرحله کمی طول می‌کشد..."
 
-# استفاده از مسیر نسبی
+# رفتن به پوشه پروژه
 cd "$PROJECT_ROOT"
 
-# فعال‌سازی venv
-source venv/bin/activate
+# استفاده مستقیم از python و pip در venv (بدون activate)
+# این روش مطمئن‌تر است
+VENV_BIN="$PROJECT_ROOT/venv/bin"
 
-if [ -z "$VIRTUAL_ENV" ]; then
-    print_error "خطا در فعال‌سازی venv!"
+# چک کردن وجود فایل‌های python و pip
+if [ -f "$VENV_BIN/python3" ]; then
+    PYTHON_EXE="$VENV_BIN/python3"
+elif [ -f "$VENV_BIN/python" ]; then
+    PYTHON_EXE="$VENV_BIN/python"
+else
+    print_error "Python در venv یافت نشد!"
+    ls -la venv/bin/
     exit 1
 fi
 
-print_success "Virtual environment فعال شد"
+print_info "Python venv: $PYTHON_EXE"
 
-# نصب dependencies
-print_step "نصب dependencies (ممکن است چند دقیقه طول بکشد)..."
-print_warning "این مرحله 2-5 دقیقه طول می‌کشد، لطفاً صبور باشید..."
+# ارتقا pip
+print_info "ارتقا pip, setuptools, wheel..."
+$PYTHON_EXE -m pip install --upgrade pip setuptools wheel
 
-# استفاده صریح از python و pip در venv
-VENV_PYTHON="./venv/bin/python3"
-VENV_PIP="./venv/bin/pip3"
-
-# اگر python3 نبود، python معمولی
-if [ ! -f "$VENV_PYTHON" ]; then
-    VENV_PYTHON="./venv/bin/python"
-fi
-
-if [ ! -f "$VENV_PIP" ]; then
-    VENV_PIP="./venv/bin/pip"
-fi
-
-# ارتقا pip با استفاده از python module
-print_info "ارتقا pip..."
-$VENV_PYTHON -m pip install --upgrade pip setuptools wheel --quiet
-
-# نصب dependencies با pip مستقیم از venv
+# نصب requirements
 echo ""
-print_info "نصب requirements.txt..."
+print_info "نصب packages از requirements.txt..."
+echo ""
 
-if $VENV_PIP install -r requirements.txt; then
-    print_success "همه dependencies نصب شدند"
+$PYTHON_EXE -m pip install -r requirements.txt
+
+if [ $? -eq 0 ]; then
+    echo ""
+    print_success "✓ همه dependencies نصب شدند"
 else
-    print_warning "تلاش مجدد بدون cache..."
-    if $VENV_PIP install -r requirements.txt --no-cache-dir; then
-        print_success "Dependencies نصب شد"
+    echo ""
+    print_warning "تلاش مجدد..."
+    $PYTHON_EXE -m pip install -r requirements.txt --no-cache-dir
+    
+    if [ $? -eq 0 ]; then
+        print_success "✓ Dependencies نصب شد"
     else
-        print_error "خطا در نصب dependencies"
+        print_error "خطا در نصب!"
         echo ""
-        print_info "برای debug:"
-        echo "  cd $PROJECT_ROOT"
-        echo "  ./venv/bin/pip3 install -r requirements.txt -v"
+        print_info "Debug:"
+        echo "  $PYTHON_EXE -m pip install -r requirements.txt -v"
         exit 1
     fi
 fi
