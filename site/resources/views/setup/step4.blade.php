@@ -64,7 +64,7 @@
                 </div>
 
                 <div class="summary-box">
-                    <h6><strong>🌐 پنل VPN:</strong></h6>
+                    <h6><strong>🌐 پنل :</strong></h6>
                     <ul>
                         <li>نام: {{ $setup_data['step2']['panel_name'] }}</li>
                         <li>نوع: {{ $setup_data['step2']['panel_type'] == 'marzban' ? 'Marzban' : 'Hiddify' }}</li>
@@ -133,7 +133,7 @@
                         addLog('✓ فایل .env ایجاد شد');
                         addLog('✓ Dependencies نصب شد');
                         addLog('✓ Migrations اجرا شد');
-                        addLog('✓ پنل VPN ثبت شد');
+                        addLog('✓ پنل  ثبت شد');
                         addLog('✓ ربات راه‌اندازی شد');
                         addLog('');
                         addLog('=== نصب با موفقیت انجام شد! ===');

@@ -38,6 +38,29 @@ Route::prefix('backup')->group(function () {
     Route::get('/sample', [BackupImportController::class, 'downloadSample'])->name('backup.sample');
 });
 
+// Root redirect - چک کردن وضعیت و هدایت مناسب
+Route::get('/', function () {
+    // اگر Setup Wizard فعال است و admin نساخته شده
+    if (env('SETUP_WIZARD_ENABLED', false) && empty(env('ADMIN_USERNAME'))) {
+        return redirect()->route('setup.welcome');
+    }
+
+    // اگر Setup Wizard فعال است و bot نصب نشده
+    if (env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false)) {
+        if (session()->has('user_authenticated')) {
+            return redirect()->route('setup');
+        }
+        return redirect()->route('login');
+    }
+
+    // اگر همه چیز نصب شده
+    if (session()->has('user_authenticated')) {
+        return redirect()->route('dashboard');
+    }
+
+    return redirect()->route('login');
+});
+
 // صفحات احراز هویت (بدون middleware)
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post');
@@ -47,7 +70,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::middleware(['web', App\Http\Middleware\Authenticate::class, App\Http\Middleware\RedirectIfSetupNeeded::class])->group(function () {
 
 // صفحه اصلی - داشبورد
-Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
 // مدیریت کاربران
 Route::prefix('users')->group(function () {

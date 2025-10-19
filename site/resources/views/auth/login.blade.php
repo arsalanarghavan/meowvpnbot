@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ورود به پنل - MeowVPN</title>
+    <title>ورود به پنل مدیریت</title>
     <link rel="stylesheet" href="{{asset('assets/css/bootstrap.css')}}">
     <link rel="stylesheet" href="{{asset('assets/css/style.css')}}">
     <style>
@@ -91,8 +91,8 @@
 <body>
     <div class="login-card">
         <div class="login-header">
-            <h3>🐱 MeowVPN Panel</h3>
-            <p>پنل مدیریت ربات VPN</p>
+            <h3>🐱 پنل مدیریت</h3>
+            <p>سیستم مدیریت ربات</p>
         </div>
 
         <div class="login-body">
@@ -136,24 +136,16 @@
                 </button>
             </form>
 
+            @if(env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false))
             <div class="demo-credentials">
-                <div class="alert alert-info mb-0">
-                    <h6><strong>📌 راهنما:</strong></h6>
-                    <small>
-                        اطلاعات ورود را در زمان نصب وارد کرده‌اید.<br>
-                        اگر فراموش کرده‌اید، فایل <code>.env</code> را بررسی کنید.
-                    </small>
-                </div>
-
-                @if(env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false))
                 <div class="alert alert-warning mt-3 mb-0">
                     <small>
                         <strong>⚠️ توجه:</strong> سیستم هنوز راه‌اندازی نشده است.<br>
-                        بعد از ورود، لطفاً <a href="{{ route('setup') }}">Setup Wizard</a> را تکمیل کنید.
+                        بعد از ورود، لطفاً <a href="{{ route('setup') }}">راه‌انداز</a> را تکمیل کنید.
                     </small>
                 </div>
-                @endif
             </div>
+            @endif
         </div>
     </div>
 

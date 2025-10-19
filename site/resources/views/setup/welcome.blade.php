@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ایجاد حساب ادمین - MeowVPN</title>
+    <title>ایجاد حساب ادمین - سیستم مدیریت</title>
     <link rel="stylesheet" href="{{asset('assets/css/bootstrap.css')}}">
     <style>
         body {

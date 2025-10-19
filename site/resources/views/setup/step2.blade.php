@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>مرحله 2 - پنل VPN</title>
+    <title>مرحله 2 - پنل </title>
     <link rel="stylesheet" href="{{asset('assets/css/bootstrap.css')}}">
     <link rel="stylesheet" href="{{asset('assets/css/style.css')}}">
 </head>
@@ -10,7 +10,7 @@
     <div class="container" style="max-width: 800px;">
         <div class="card">
             <div class="card-header bg-primary text-white text-center">
-                <h4>مرحله 2 از 4 - پنل VPN</h4>
+                <h4>مرحله 2 از 4 - پنل </h4>
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ route('setup.step2.save') }}">

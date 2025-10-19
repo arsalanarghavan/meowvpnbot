@@ -118,7 +118,7 @@
                                value="{{ old('bot_username', session('setup_step1.bot_username')) }}"
                                placeholder="YourBotUsername"
                                required>
-                        <small class="text-muted">بدون @ (مثال: MyVPNBot)</small>
+                        <small class="text-muted">بدون @ (مثال: MyBot)</small>
                     </div>
 
                     <div class="form-group mb-4">

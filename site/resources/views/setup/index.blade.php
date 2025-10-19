@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Setup Wizard - MeowVPN</title>
+    <title>Setup Wizard - سیستم مدیریت</title>
     <link rel="stylesheet" href="{{asset('assets/css/bootstrap.css')}}">
     <link rel="stylesheet" href="{{asset('assets/css/style.css')}}">
     <style>
@@ -68,7 +68,7 @@
             <div class="wizard-header">
                 <div class="welcome-icon">🐱</div>
                 <h2>خوش آمدید به Setup Wizard</h2>
-                <p>راه‌اندازی MeowVPN Bot در 4 مرحله ساده</p>
+                <p>راه‌اندازی سیستم مدیریت Bot در 4 مرحله ساده</p>
             </div>
 
             <div class="wizard-body text-center">
@@ -81,7 +81,7 @@
 
                 <ul class="feature-list list-unstyled">
                     <li>✅ تنظیم ربات تلگرام</li>
-                    <li>✅ اتصال به پنل VPN (Marzban/Hiddify)</li>
+                    <li>✅ اتصال به پنل  (Marzban/Hiddify)</li>
                     <li>✅ تنظیم درگاه پرداخت (اختیاری)</li>
                     <li>✅ راه‌اندازی خودکار ربات</li>
                 </ul>
@@ -95,7 +95,7 @@
                     <strong>📝 آماده باشید:</strong>
                     <ul class="text-right mb-0">
                         <li>توکن ربات از @BotFather</li>
-                        <li>اطلاعات پنل VPN (Marzban/Hiddify)</li>
+                        <li>اطلاعات پنل  (Marzban/Hiddify)</li>
                         <li>Merchant ID زرین‌پال (اختیاری)</li>
                     </ul>
                 </div>
