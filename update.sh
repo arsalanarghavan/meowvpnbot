@@ -21,8 +21,8 @@ print_header() {
     echo -e "${PURPLE}"
     echo "╔═══════════════════════════════════════════════════╗"
     echo "║                                                   ║"
-    echo "║         🔄 MeowVPN Bot Updater 🔄               ║"
-    echo "║           به‌روزرسانی خودکار ربات              ║"
+    echo "║    🔄 MeowVPN Bot + Website Updater 🔄          ║"
+    echo "║       به‌روزرسانی ربات و پنل وب                 ║"
     echo "║                                                   ║"
     echo "╚═══════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -51,13 +51,17 @@ print_info() {
 # شروع
 print_header
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$SCRIPT_DIR"
+SITE_DIR="$PROJECT_ROOT/site"
+
 echo -e "${CYAN}"
 echo "این اسکریپت موارد زیر را انجام می‌دهد:"
 echo "  1. پشتیبان‌گیری از دیتابیس"
 echo "  2. دریافت آخرین تغییرات (git pull)"
-echo "  3. به‌روزرسانی dependencies"
+echo "  3. به‌روزرسانی dependencies (Bot & Website)"
 echo "  4. اجرای migrations جدید"
-echo "  5. ریستارت ربات"
+echo "  5. ریستارت ربات و پنل وب"
 echo ""
 echo -e "${NC}"
 
@@ -179,6 +183,26 @@ print_step "پاک‌سازی cache..."
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find . -type f -name "*.pyc" -delete 2>/dev/null || true
 print_success "Cache پاک شد"
+
+# به‌روزرسانی پنل وب
+echo ""
+if [ -d "$SITE_DIR" ] && command -v composer &> /dev/null; then
+    print_step "به‌روزرسانی پنل وب..."
+    cd "$SITE_DIR"
+    
+    composer install --optimize-autoloader --no-interaction
+    print_success "Dependencies پنل وب به‌روزرسانی شد"
+    
+    php artisan config:clear
+    php artisan cache:clear
+    php artisan view:clear
+    php artisan route:clear
+    print_success "Cache پنل وب پاک شد"
+    
+    cd "$PROJECT_ROOT"
+else
+    print_warning "پنل وب یافت نشد یا Composer نصب نیست"
+fi
 
 # راه‌اندازی مجدد ربات
 echo ""
