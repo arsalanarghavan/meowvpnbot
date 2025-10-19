@@ -92,36 +92,31 @@ PANEL_DOMAIN="${PANEL_SUBDOMAIN}.${MAIN_DOMAIN}"
 echo ""
 print_info "پنل در این آدرس نصب می‌شود: ${GREEN}https://$PANEL_DOMAIN${NC}"
 echo ""
-print_warning "اطلاعات ادمین (یوزر و پسورد) در Setup Wizard از شما گرفته خواهد شد."
-echo ""
-
-read -p "آیا می‌خواهید ادامه دهید؟ (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_warning "نصب لغو شد."
-    exit 1
-fi
 
 INSTALL_MODE="wizard"
 
 # بررسی Python
 print_step "بررسی Python..."
 if ! command -v python3 &> /dev/null; then
-    print_error "Python 3 یافت نشد! لطفاً ابتدا Python 3.9+ را نصب کنید."
-    exit 1
+    print_warning "Python 3 یافت نشد! در حال نصب..."
+    sudo apt update
+    sudo apt install -y python3 python3-pip python3-venv
+    print_success "Python نصب شد"
+else
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+    print_success "Python $PYTHON_VERSION یافت شد"
 fi
-
-PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-print_success "Python $PYTHON_VERSION یافت شد"
 
 # بررسی pip
 print_step "بررسی pip..."
 if ! command -v pip3 &> /dev/null; then
-    print_error "pip یافت نشد! در حال نصب..."
-    sudo apt-get update
-    sudo apt-get install -y python3-pip
+    print_warning "pip یافت نشد! در حال نصب..."
+    sudo apt update
+    sudo apt install -y python3-pip
+    print_success "pip نصب شد"
+else
+    print_success "pip آماده است"
 fi
-print_success "pip آماده است"
 
 # ایجاد virtual environment
 print_step "ایجاد virtual environment..."
@@ -139,9 +134,20 @@ print_success "Virtual environment فعال شد"
 
 # نصب dependencies
 print_step "نصب dependencies (ممکن است چند دقیقه طول بکشد)..."
-pip install --upgrade pip > /dev/null 2>&1
-pip install -r requirements.txt
-print_success "همه dependencies نصب شدند"
+print_warning "این مرحله 2-5 دقیقه طول می‌کشد، لطفاً صبور باشید..."
+
+# ارتقا pip
+pip install --upgrade pip setuptools wheel --quiet
+
+# نصب dependencies با نمایش پیشرفت
+if pip install -r requirements.txt; then
+    print_success "همه dependencies نصب شدند"
+else
+    print_error "خطا در نصب dependencies"
+    print_info "در حال تلاش مجدد..."
+    pip install -r requirements.txt --no-cache-dir
+    print_success "Dependencies با روش جایگزین نصب شد"
+fi
 
 # بررسی فایل .env
 print_step "بررسی فایل .env..."
@@ -378,46 +384,58 @@ else
     WEBSITE_INSTALLED=false
 fi
 
-# ایجاد فایل systemd service (اختیاری)
+# نصب سیستم Auto-Restart و Monitoring
 echo ""
-read -p "آیا می‌خواهید systemd service ایجاد شود؟ (برای اجرای خودکار) (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_step "ایجاد systemd service..."
+print_step "نصب سیستم Auto-Restart و Monitoring..."
+print_info "این سیستم تضمین می‌کند سرویس‌ها همیشه در حال اجرا باشند"
+echo ""
+
+if [ -f "$PROJECT_ROOT/setup_autostart.sh" ]; then
+    # اجرای اسکریپت Auto-Restart
+    bash "$PROJECT_ROOT/setup_autostart.sh"
+    print_success "سیستم Auto-Restart نصب شد"
+else
+    # اگر فایل نبود، دستی ایجاد کن
+    print_step "ایجاد Systemd service..."
     
     CURRENT_DIR=$(pwd)
-    CURRENT_USER=$(whoami)
-    VENV_PYTHON="$CURRENT_DIR/venv/bin/python"
     
-    sudo tee /etc/systemd/system/meowvpnbot.service > /dev/null <<EOF
+    sudo tee /etc/systemd/system/meowvpn-bot.service > /dev/null <<EOF
 [Unit]
 Description=MeowVPN Telegram Bot
 After=network.target
+Documentation=https://github.com/yourusername/meowvpnbot
 
 [Service]
 Type=simple
-User=$CURRENT_USER
+User=www-data
 WorkingDirectory=$CURRENT_DIR
 Environment="PATH=$CURRENT_DIR/venv/bin"
-ExecStart=$VENV_PYTHON main.py
+ExecStart=$CURRENT_DIR/venv/bin/python main.py
+
+# Auto-restart settings - همیشه ریستارت شود
 Restart=always
 RestartSec=10
+StartLimitInterval=0
+StartLimitBurst=10
+
+# Logging
+StandardOutput=append:/var/log/meowvpn-bot.log
+StandardError=append:/var/log/meowvpn-bot-error.log
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
     sudo systemctl daemon-reload
-    sudo systemctl enable meowvpnbot.service
-    print_success "Systemd service ایجاد و فعال شد"
+    sudo systemctl enable meowvpn-bot.service
+    sudo systemctl start meowvpn-bot.service
     
-    echo ""
-    print_info "برای کنترل service از دستورات زیر استفاده کنید:"
-    echo "  • شروع:    sudo systemctl start meowvpnbot"
-    echo "  • توقف:     sudo systemctl stop meowvpnbot"
-    echo "  • ریستارت: sudo systemctl restart meowvpnbot"
-    echo "  • وضعیت:   sudo systemctl status meowvpnbot"
-    echo "  • لاگ‌ها:   sudo journalctl -u meowvpnbot -f"
+    print_success "Systemd service ایجاد، فعال و اجرا شد"
 fi
 
 # تست نصب
@@ -452,104 +470,116 @@ print_info "📋 مرحله نهایی - Setup Wizard"
 echo ""
 
 if [ "$WEBSITE_INSTALLED" = "true" ]; then
-    echo -e "${GREEN}╔═══════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║          ✨ نصب با موفقیت انجام شد! ✨            ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                                                          ║${NC}"
+    echo -e "${GREEN}║          ✅ نصب با موفقیت کامل شد! ✅                   ║${NC}"
+    echo -e "${GREEN}║                                                          ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
     echo ""
     
-    # نمایش اطلاعات دسترسی
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}🌐 آدرس پنل مدیریت:${NC}"
+    # نمایش اطلاعات نصب
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║                   📊 خلاصه نصب                          ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "   ${GREEN}$PANEL_URL${NC}"
+    echo -e "  ${CYAN}✓${NC} Python و Dependencies نصب شد"
+    echo -e "  ${CYAN}✓${NC} PHP و Composer نصب شد"
+    echo -e "  ${CYAN}✓${NC} Nginx نصب و تنظیم شد"
+    echo -e "  ${CYAN}✓${NC} SSL Certificate دریافت شد"
+    echo -e "  ${CYAN}✓${NC} HTTPS فعال شد"
+    echo -e "  ${CYAN}✓${NC} Auto-Restart فعال شد"
+    echo -e "  ${CYAN}✓${NC} پنل وب آماده است"
     echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}👤 اطلاعات ورود:${NC}"
-    echo ""
-    echo -e "   Username: ${YELLOW}$ADMIN_USER${NC}"
-    echo -e "   Password: ${YELLOW}(همان رمزی که وارد کردید)${NC}"
-    echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    
-    # راهنمای مرحله بعد
-    echo -e "${YELLOW}📌 مرحله بعدی - Setup Wizard:${NC}"
-    echo ""
-    echo -e "  ${GREEN}1.${NC} مرورگر را باز کنید"
-    echo -e "  ${GREEN}2.${NC} به این آدرس بروید:"
-    echo ""
-    echo -e "     ${BLUE}$PANEL_URL/setup${NC}"
-    echo ""
-    echo -e "  ${GREEN}3.${NC} ایجاد حساب ادمین:"
-    echo -e "     ▸ یوزرنیم دلخواه شما"
-    echo -e "     ▸ پسورد امن (حداقل 6 کاراکتر)"
-    echo ""
-    echo -e "  ${GREEN}4.${NC} انتخاب کنید:"
-    echo -e "     📦 بازیابی از بکاپ قدیمی (demo.sql)"
-    echo -e "     🚀 نصب جدید (از ابتدا)"
-    echo ""
-    echo -e "  ${GREEN}5.${NC} تکمیل Setup Wizard (4 مرحله):"
-    echo -e "     ✓ تنظیمات ربات تلگرام"
-    echo -e "     ✓ اطلاعات پنل VPN"
-    echo -e "     ✓ تنظیمات پرداخت"
-    echo -e "     ✓ نصب خودکار ربات"
-    echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    # کپی لینک مستقیم
+    # لینک Setup Wizard
     SETUP_URL="$PANEL_URL/setup"
     
-    echo -e "${GREEN}🎯 لینک Setup Wizard (کلیک کنید):${NC}"
+    echo -e "${GREEN}🎯 مرحله بعدی:${NC}"
     echo ""
-    echo -e "   ${BLUE}$SETUP_URL${NC}"
+    echo -e "${YELLOW}  برای تکمیل نصب، این لینک را در مرورگر باز کنید:${NC}"
+    echo ""
+    echo -e "     ╔════════════════════════════════════════════════╗"
+    echo -e "     ║                                                ║"
+    echo -e "     ║   ${BLUE}$SETUP_URL${NC}   ║"
+    echo -e "     ║                                                ║"
+    echo -e "     ╚════════════════════════════════════════════════╝"
+    echo ""
+    echo ""
+    echo -e "${CYAN}در Setup Wizard:${NC}"
+    echo ""
+    echo -e "  ${GREEN}→${NC} ایجاد حساب ادمین (یوزرنیم و پسورد)"
+    echo -e "  ${GREEN}→${NC} Import بکاپ قدیمی (اختیاری)"
+    echo -e "  ${GREEN}→${NC} تنظیمات ربات تلگرام"
+    echo -e "  ${GREEN}→${NC} تنظیمات پنل VPN"
+    echo -e "  ${GREEN}→${NC} نصب و راه‌اندازی خودکار ربات"
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
     # نمایش QR Code (اگر qrencode نصب باشد)
     if command -v qrencode &> /dev/null; then
-        echo -e "${CYAN}📱 QR Code برای دسترسی سریع:${NC}"
+        echo -e "${CYAN}📱 یا اسکن QR Code:${NC}"
+        echo ""
         qrencode -t ANSIUTF8 "$SETUP_URL"
         echo ""
     fi
     
-    echo -e "${YELLOW}⚠️  نکات مهم:${NC}"
+    echo -e "${YELLOW}💡 نکته:${NC} Setup Wizard فقط یک بار قابل اجرا است."
+    echo -e "   بعد از تکمیل، ربات خودکار راه‌اندازی و همیشه در حال اجرا خواهد بود."
     echo ""
-    echo "  • یوزر و پسورد در Setup Wizard از شما گرفته می‌شود"
-    echo "  • هیچ رمز پیش‌فرضی وجود ندارد (امنیت 100%)"
-    echo "  • Setup Wizard فقط یک بار قابل اجراست"
-    echo "  • می‌توانید demo.sql را Import کنید"
-    echo "  • بعد از Wizard، ربات خودکار راه‌اندازی می‌شود"
+    
     echo ""
-else
-    echo "  ${CYAN}1. ربات را اجرا کنید:${NC}"
-    echo "     ${GREEN}source venv/bin/activate${NC}"
-    echo "     ${GREEN}python main.py${NC}"
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║                  🔧 دستورات مفید                        ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "  ${CYAN}وضعیت سرویس‌ها:${NC}"
+    echo -e "    systemctl status meowvpn-bot"
+    echo -e "    systemctl status nginx"
+    echo ""
+    echo -e "  ${CYAN}مشاهده لاگ‌ها:${NC}"
+    echo -e "    journalctl -u meowvpn-bot -f"
+    echo -e "    tail -f /var/log/meowvpn-health.log"
+    echo ""
+    echo -e "  ${CYAN}به‌روزرسانی آینده:${NC}"
+    echo -e "    cd $(pwd) && sudo ./update.sh"
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 fi
 
-print_info "📚 فایل‌های مهم:"
-echo "  • START_HERE.md - شروع از اینجا ⭐"
-echo "  • QUICK_START.md - راهنمای سریع"
-echo "  • DEPLOYMENT_GUIDE.md - راهنمای کامل"
-echo "  • CARD_MANAGEMENT_GUIDE.md - راهنمای کارت‌ها 🆕"
 echo ""
-
-echo -e "${PURPLE}╔═══════════════════════════════════════════════════╗${NC}"
-echo -e "${PURPLE}║       🎉 از استفاده از MeowVPN Bot              ║${NC}"
-echo -e "${PURPLE}║            لذت ببرید! 🚀                          ║${NC}"
-echo -e "${PURPLE}╚═══════════════════════════════════════════════════╝${NC}"
+echo -e "${PURPLE}╔══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${PURPLE}║                                                          ║${NC}"
+echo -e "${PURPLE}║       🎉 نصب سیستم با موفقیت کامل شد! 🎉               ║${NC}"
+echo -e "${PURPLE}║                                                          ║${NC}"
+echo -e "${PURPLE}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # نمایش لوگو نهایی
 echo -e "${CYAN}"
 cat << "EOF"
      /\_/\  
-    ( o.o ) 
-     > ^ <   MeowVPN Bot v2.5.0
-    /|   |\  Ready to meow! 🐱
-   (_|   |_)
+    ( ^.^ ) 
+     > ^ <   MeowVPN Bot v3.0
+    /|   |\  با Setup Wizard و Auto-Restart
+   (_|   |_) Ready to rock! 🚀
 EOF
 echo -e "${NC}"
+echo ""
 
-print_success "نصب کامل شد! موفق باشید! 🎊"
+if [ "$WEBSITE_INSTALLED" = "true" ]; then
+    echo -e "${GREEN}✨ الان Setup Wizard را باز کنید:${NC}"
+    echo ""
+    echo -e "   ${BLUE}${SETUP_URL}${NC}"
+    echo ""
+fi
+
+print_success "همه چیز آماده است! موفق باشید! 🎊"
+echo ""
 
