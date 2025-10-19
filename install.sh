@@ -395,6 +395,26 @@ ENVFILE
     # ایجاد کانفیگ Nginx
     print_step "ایجاد کانفیگ Nginx..."
     
+    # پیدا کردن PHP-FPM socket
+    PHP_FPM_SOCK=$(find /var/run/php/ -name "php*-fpm.sock" 2>/dev/null | head -n 1)
+    
+    if [ -z "$PHP_FPM_SOCK" ]; then
+        # اگر پیدا نشد، سعی کن PHP-FPM رو start کنی
+        print_warning "PHP-FPM socket یافت نشد، در حال start کردن..."
+        sudo systemctl enable php8.2-fpm 2>/dev/null || sudo systemctl enable php8.1-fpm 2>/dev/null || sudo systemctl enable php-fpm 2>/dev/null
+        sudo systemctl start php8.2-fpm 2>/dev/null || sudo systemctl start php8.1-fpm 2>/dev/null || sudo systemctl start php-fpm 2>/dev/null
+        sleep 2
+        PHP_FPM_SOCK=$(find /var/run/php/ -name "php*-fpm.sock" 2>/dev/null | head -n 1)
+    fi
+    
+    if [ -z "$PHP_FPM_SOCK" ]; then
+        # fallback به php8.2-fpm.sock
+        PHP_FPM_SOCK="/var/run/php/php8.2-fpm.sock"
+        print_warning "استفاده از: $PHP_FPM_SOCK"
+    else
+        print_info "PHP-FPM Socket: $PHP_FPM_SOCK"
+    fi
+    
     sudo tee /etc/nginx/sites-available/$PANEL_DOMAIN > /dev/null <<NGINXCONF
 server {
     listen 80;
@@ -411,7 +431,7 @@ server {
     }
 
     location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_pass unix:$PHP_FPM_SOCK;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         include fastcgi_params;
@@ -428,10 +448,28 @@ NGINXCONF
     sudo rm -f /etc/nginx/sites-enabled/default
     
     # تست کانفیگ
-    sudo nginx -t
-    sudo systemctl restart nginx
+    print_info "تست کانفیگ Nginx..."
+    if sudo nginx -t; then
+        print_success "کانفیگ Nginx صحیح است"
+    else
+        print_error "خطا در کانفیگ Nginx"
+        sudo nginx -t 2>&1
+        exit 1
+    fi
     
-    print_success "Nginx تنظیم شد"
+    # ریستارت Nginx
+    print_info "راه‌اندازی مجدد Nginx..."
+    if sudo systemctl restart nginx; then
+        print_success "Nginx راه‌اندازی شد"
+    else
+        print_error "خطا در راه‌اندازی Nginx"
+        echo ""
+        print_info "بررسی خطا:"
+        sudo systemctl status nginx --no-pager -l
+        echo ""
+        sudo journalctl -xeu nginx.service --no-pager | tail -20
+        exit 1
+    fi
     
     # نصب SSL
     echo ""
