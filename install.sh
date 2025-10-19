@@ -384,12 +384,18 @@ ENVFILE
     print_step "نصب و تنظیم Nginx..."
     
     if ! command -v nginx &> /dev/null; then
-        print_info "نصب Nginx..."
+        print_info "نصب Nginx و ابزارهای مورد نیاز..."
         sudo apt update
-        sudo apt install -y nginx certbot python3-certbot-nginx
+        sudo apt install -y nginx certbot python3-certbot-nginx lsof net-tools
         print_success "Nginx نصب شد"
     else
         print_success "Nginx از قبل نصب شده است"
+        
+        # نصب lsof اگر نبود
+        if ! command -v lsof &> /dev/null; then
+            print_info "نصب lsof..."
+            sudo apt install -y lsof net-tools
+        fi
     fi
     
     # ایجاد کانفیگ Nginx
@@ -457,15 +463,54 @@ NGINXCONF
         exit 1
     fi
     
-    # ریستارت Nginx
-    print_info "راه‌اندازی مجدد Nginx..."
-    if sudo systemctl restart nginx; then
-        print_success "Nginx راه‌اندازی شد"
+    # چک پورت 80 و 443
+    print_info "بررسی پورت‌های 80 و 443..."
+    PORT_80_PROCESS=$(sudo lsof -ti:80 2>/dev/null)
+    
+    if [ -n "$PORT_80_PROCESS" ]; then
+        print_warning "پورت 80 در حال استفاده است"
+        echo "فرآیند: $(ps -p $PORT_80_PROCESS -o comm= 2>/dev/null)"
+        
+        # اگر خود Nginx است، فقط reload کن
+        if ps -p $PORT_80_PROCESS -o comm= 2>/dev/null | grep -q nginx; then
+            print_info "Nginx قبلاً در حال اجرا است، در حال reload..."
+            sudo systemctl reload nginx
+            print_success "Nginx reload شد"
+        else
+            # اگر چیز دیگه‌ای است (مثل Apache)
+            print_warning "یک سرویس دیگر پورت 80 را اشغال کرده:"
+            sudo ss -tulpn | grep :80
+            
+            # سعی کن Apache رو stop کنی
+            if systemctl is-active --quiet apache2; then
+                print_info "متوقف کردن Apache2..."
+                sudo systemctl stop apache2
+                sudo systemctl disable apache2
+                print_success "Apache2 متوقف شد"
+            fi
+            
+            # حالا Nginx رو start کن
+            print_info "راه‌اندازی Nginx..."
+            sudo systemctl restart nginx
+        fi
+    else
+        # پورت آزاد است، Nginx رو restart کن
+        print_info "راه‌اندازی مجدد Nginx..."
+        sudo systemctl restart nginx
+    fi
+    
+    # چک موفقیت
+    sleep 2
+    if sudo systemctl is-active --quiet nginx; then
+        print_success "Nginx با موفقیت راه‌اندازی شد"
     else
         print_error "خطا در راه‌اندازی Nginx"
         echo ""
         print_info "بررسی خطا:"
         sudo systemctl status nginx --no-pager -l
+        echo ""
+        print_info "پورت‌های در حال استفاده:"
+        sudo ss -tulpn | grep -E ':80|:443'
         echo ""
         sudo journalctl -xeu nginx.service --no-pager | tail -20
         exit 1
