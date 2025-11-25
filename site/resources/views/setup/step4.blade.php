@@ -150,7 +150,37 @@
                     }
                 },
                 error: function(xhr) {
-                    addLog('✗ خطای سرور: ' + (xhr.responseJSON?.message || 'خطای ناشناخته'));
+                    var errorMessage = 'خطای ناشناخته';
+                    
+                    // تلاش برای دریافت پیام خطا از response
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.message) {
+                            errorMessage = xhr.responseJSON.message;
+                        } else if (xhr.responseJSON.error) {
+                            errorMessage = xhr.responseJSON.error;
+                        }
+                    } else if (xhr.responseText) {
+                        try {
+                            var parsed = JSON.parse(xhr.responseText);
+                            if (parsed.message) {
+                                errorMessage = parsed.message;
+                            }
+                        } catch(e) {
+                            // اگر JSON نبود، از responseText استفاده کن
+                            if (xhr.responseText.length < 200) {
+                                errorMessage = xhr.responseText;
+                            }
+                        }
+                    }
+                    
+                    addLog('✗ خطای سرور: ' + errorMessage);
+                    addLog('✗ کد خطا: ' + xhr.status);
+                    
+                    // نمایش alert برای خطاهای مهم
+                    if (xhr.status === 500 || xhr.status === 0) {
+                        alert('خطای سرور رخ داد. لطفاً لاگ‌های سرور را بررسی کنید:\n' + errorMessage);
+                    }
+                    
                     btn.prop('disabled', false);
                     btnBack.prop('disabled', false);
                     spinner.hide();

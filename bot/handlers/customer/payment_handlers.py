@@ -240,7 +240,7 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     try:
-        tx_id = int(query.data.split('_')[2])
+    tx_id = int(query.data.split('_')[2])
     except (ValueError, IndexError) as e:
         await query.edit_message_text(_('messages.error_general'))
         await log_error(context, e, "parsing verify payment callback")

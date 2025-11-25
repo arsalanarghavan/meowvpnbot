@@ -16,7 +16,7 @@ class SetupWizardController extends Controller
         if (strpos($basePath, '/site') !== false) {
             $this->projectRoot = dirname($basePath);
         } else {
-            $this->projectRoot = base_path('..');
+        $this->projectRoot = base_path('..');
         }
         
         // اگر مسیر درست نیست، سعی کن از مسیر فعلی استفاده کنی
@@ -352,42 +352,82 @@ class SetupWizardController extends Controller
         }
 
         try {
+            \Log::info('Setup Wizard Install Started', [
+                'project_root' => $this->projectRoot ?? 'not set',
+                'has_step1' => !empty(session('setup_step1')),
+                'has_step2' => !empty(session('setup_step2')),
+                'has_step3' => !empty(session('setup_step3')),
+            ]);
+
             $step1 = session('setup_step1');
             $step2 = session('setup_step2');
             $step3 = session('setup_step3');
 
             if (!$step1 || !$step2 || !$step3) {
+                \Log::warning('Setup Wizard: Missing steps', [
+                    'step1' => !empty($step1),
+                    'step2' => !empty($step2),
+                    'step3' => !empty($step3),
+                ]);
                 return response()->json(['success' => false, 'message' => 'اطلاعات ناقص است! لطفاً مراحل قبلی را تکمیل کنید.']);
             }
 
             // بررسی مسیر پروژه
-            if (!is_dir($this->projectRoot)) {
-                throw new \Exception("مسیر پروژه یافت نشد: {$this->projectRoot}. لطفاً مسیر نصب را بررسی کنید.");
+            if (empty($this->projectRoot) || !is_dir($this->projectRoot)) {
+                $errorMsg = "مسیر پروژه یافت نشد: " . ($this->projectRoot ?? 'تعیین نشده') . ". لطفاً مسیر نصب را بررسی کنید.";
+                \Log::error('Setup Wizard: Project root not found', ['project_root' => $this->projectRoot]);
+                throw new \Exception($errorMsg);
             }
 
+            \Log::info('Setup Wizard: Creating bot .env file');
             // 1. ایجاد فایل .env ربات
             $this->createBotEnv($step1, $step2, $step3);
+            \Log::info('Setup Wizard: Bot .env file created');
 
+            \Log::info('Setup Wizard: Installing bot dependencies');
             // 2. نصب dependencies ربات
             $this->installBotDependencies();
+            \Log::info('Setup Wizard: Bot dependencies installed');
 
+            \Log::info('Setup Wizard: Running migrations');
             // 3. اجرای migrations
             $this->runMigrations();
+            \Log::info('Setup Wizard: Migrations completed');
 
+            \Log::info('Setup Wizard: Saving panel to database');
             // 4. ثبت پنل در دیتابیس
             $this->savePanelToDatabase($step2);
+            \Log::info('Setup Wizard: Panel saved');
 
+            \Log::info('Setup Wizard: Saving settings to database');
             // 5. ثبت تنظیمات در دیتابیس
             $this->saveSettingsToDatabase($step3);
+            \Log::info('Setup Wizard: Settings saved');
 
+            \Log::info('Setup Wizard: Creating systemd service');
             // 6. ایجاد systemd service (اختیاری)
-            $this->createSystemdService();
+            try {
+                $this->createSystemdService();
+                \Log::info('Setup Wizard: Systemd service created');
+            } catch (\Exception $e) {
+                \Log::warning('Setup Wizard: Failed to create systemd service', ['error' => $e->getMessage()]);
+                // ادامه بده حتی اگر systemd service ایجاد نشد
+            }
 
+            \Log::info('Setup Wizard: Starting bot');
             // 7. راه‌اندازی ربات
-            $this->startBot();
+            try {
+                $this->startBot();
+                \Log::info('Setup Wizard: Bot started');
+            } catch (\Exception $e) {
+                \Log::warning('Setup Wizard: Failed to start bot', ['error' => $e->getMessage()]);
+                // ادامه بده حتی اگر ربات راه‌اندازی نشد
+            }
 
+            \Log::info('Setup Wizard: Disabling wizard');
             // 8. غیرفعال کردن wizard
             $this->disableWizard();
+            \Log::info('Setup Wizard: Wizard disabled');
 
             // پاک کردن session
             session()->forget(['setup_step1', 'setup_step2', 'setup_step3']);
@@ -400,19 +440,37 @@ class SetupWizardController extends Controller
 
         } catch (\Exception $e) {
             // لاگ کردن خطا برای دیباگ
-            \Log::error('Setup Wizard Install Error', [
+            $errorDetails = [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
+                'project_root' => $this->projectRoot ?? 'not set',
                 'trace' => $e->getTraceAsString()
-            ]);
+            ];
+            
+            \Log::error('Setup Wizard Install Error', $errorDetails);
+            
+            // ساخت پیام خطای کاربرپسند
+            $userMessage = 'خطا در نصب: ' . $e->getMessage();
+            
+            // اگر خطا مربوط به مجوزها باشد، راهنمایی بده
+            if (strpos($e->getMessage(), 'مجوز') !== false || strpos($e->getMessage(), 'permission') !== false) {
+                $userMessage .= "\n\nراه حل: لطفاً مجوزهای مسیر پروژه را بررسی کنید:\nsudo chown -R www-data:www-data " . ($this->projectRoot ?? '/var/www/meowvpnbot');
+            }
+            
+            // اگر خطا مربوط به مسیر باشد، راهنمایی بده
+            if (strpos($e->getMessage(), 'مسیر') !== false || strpos($e->getMessage(), 'path') !== false) {
+                $userMessage .= "\n\nراه حل: لطفاً مسیر نصب را بررسی کنید. مسیر فعلی: " . ($this->projectRoot ?? 'تعیین نشده');
+            }
             
             return response()->json([
                 'success' => false,
-                'message' => 'خطا در نصب: ' . $e->getMessage(),
+                'message' => $userMessage,
+                'error_code' => $e->getCode(),
                 'error_details' => config('app.debug') ? [
-                    'file' => $e->getFile(),
+                    'file' => basename($e->getFile()),
                     'line' => $e->getLine(),
+                    'project_root' => $this->projectRoot ?? 'not set',
                 ] : null
             ], 500);
         }

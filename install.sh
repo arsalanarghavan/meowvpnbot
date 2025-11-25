@@ -31,7 +31,7 @@ NEEDS_MOVE=false
 if [[ "$PROJECT_ROOT" == /root/* ]]; then
     # چک می‌کنیم که آیا قبلاً در /var/www نصب شده یا نه
     if [ ! -d "$RECOMMENDED_PATH" ]; then
-        NEEDS_MOVE=true
+    NEEDS_MOVE=true
     else
         # اگر در /var/www قبلاً نصب شده، از همان استفاده می‌کنیم
         print_info "نصب قبلی در $RECOMMENDED_PATH یافت شد"
@@ -802,7 +802,7 @@ NGINXCONF
                 echo ""
                 read -p "آیا می‌خواهید بدون SSL ادامه دهید؟ (y/n) " -n 1 -r
                 echo ""
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $REPLY =~ ^[Yy]$ ]]; then
                     print_warning "ادامه بدون SSL - بعداً می‌توانید نصب کنید"
                     PANEL_URL="http://$PANEL_DOMAIN"
                 else
