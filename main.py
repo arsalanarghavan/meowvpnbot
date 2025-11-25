@@ -59,7 +59,21 @@ def main() -> None:
     """The main function to run the bot."""
     logger.info("Starting bot...")
 
+    # Validate required configuration
+    if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":
+        logger.critical("BOT_TOKEN is not set or is invalid! Please set TELEGRAM_BOT_TOKEN in .env file.")
+        raise ValueError("BOT_TOKEN is required to start the bot. Please set TELEGRAM_BOT_TOKEN in .env file.")
+
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # Validate ADMIN_IDS
+    if not ADMIN_IDS:
+        logger.warning(
+            "ADMIN_IDS is empty! No admin commands will work. "
+            "Please set ADMIN_ID in .env file. Example: ADMIN_ID=123456789,987654321"
+        )
+    else:
+        logger.info(f"Bot configured with {len(ADMIN_IDS)} admin(s): {ADMIN_IDS}")
 
     # Pass admin_ids to bot_data for global access
     application.bot_data['admin_ids'] = ADMIN_IDS

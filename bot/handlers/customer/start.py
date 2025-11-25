@@ -41,6 +41,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         else:
             reply_markup = get_customer_main_menu()
 
+    except Exception as e:
+        db.rollback()
+        raise
     finally:
         db.close()
 

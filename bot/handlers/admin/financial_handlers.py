@@ -131,6 +131,7 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
             )
             
     except Exception as e:
+        db.rollback()
         await log_error(context, e, "handling receipt confirmation")
         await query.edit_message_text(_('messages.error_general'), reply_markup=None)
     finally:

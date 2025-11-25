@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
 from core.translator import _
-from core.config import ADMIN_ID, ADMIN_IDS
+from core.config import ADMIN_IDS
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -239,12 +239,19 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
 
-    tx_id = int(query.data.split('_')[2])
+    try:
+        tx_id = int(query.data.split('_')[2])
+    except (ValueError, IndexError) as e:
+        await query.edit_message_text(_('messages.error_general'))
+        await log_error(context, e, "parsing verify payment callback")
+        return END_CONVERSION
+    
     db = SessionLocal()
     try:
         tx = transaction_queries.get_transaction_by_id(db, tx_id)
         if not tx or tx.status != TransactionStatus.PENDING:
             await query.edit_message_text(_('messages.admin_tx_already_processed'))
+            db.rollback()
             return END_CONVERSION
 
         await query.edit_message_text(_('messages.verifying_payment'))
@@ -268,17 +275,24 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 service_username = f"uid{tx.user_id}-{uuid.uuid4().hex[:8]}"
                 user_details_list = []
 
+                failed_panels = []
                 for panel in panels:
+                    if not panel.is_active:
+                        continue
                     try:
                         api = get_panel_api(panel)
                         user_details = await api.create_user(plan=tx.plan, username=service_username)
                         user_details_list.append(user_details)
                     except Exception as e:
+                        failed_panels.append(panel.name)
                         logger.error(f"Failed to create user on panel {panel.name} during online payment: {e}")
+                        await log_error(context, e, f"Failed to create user on panel {panel.name} during online payment")
+                        continue
                 
                 if not user_details_list:
                     await query.edit_message_text(_('messages.error_all_panels_failed'))
                     transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.FAILED) # Revert tx
+                    db.rollback()
                     return END_CONVERSION
 
                 combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
@@ -298,6 +312,10 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
             transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.FAILED)
             await query.edit_message_text(_('messages.payment_failed', error_code=ref_id))
 
+    except Exception as e:
+        db.rollback()
+        await query.edit_message_text(_('messages.error_general'))
+        await log_error(context, e, "verify_online_payment")
     finally:
         db.close()
 

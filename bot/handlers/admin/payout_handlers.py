@@ -51,6 +51,7 @@ async def handle_payout_decision(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(chat_id=marketer_id, text=_('messages.marketer_payout_rejected'))
             
     except Exception as e:
+        db.rollback()
         await log_error(context, e, "Handling payout decision")
         await query.edit_message_text(_('messages.error_general_with_details', error=str(e)), reply_markup=None)
     finally:

@@ -36,7 +36,14 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 
 # --- Logging Configuration ---
 # آیدی کانالی که می‌خواهید لاگ‌ها و خطاها در آن ارسال شود
-LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID")) if os.getenv("LOG_CHANNEL_ID") else None
+LOG_CHANNEL_ID = None
+log_channel_id_str = os.getenv("LOG_CHANNEL_ID")
+if log_channel_id_str:
+    try:
+        LOG_CHANNEL_ID = int(log_channel_id_str.strip())
+    except (ValueError, TypeError):
+        # اگر مقدار نامعتبر باشد، None می‌ماند و warning نمی‌دهیم (اختیاری است)
+        pass
 
 
 # --- Marzban Panel API Configuration ---

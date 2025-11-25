@@ -155,21 +155,149 @@
 @section('script')
 <script src="{{asset('assets/js/sweet-alert/sweetalert.min.js')}}"></script>
 <script>
+const userId = {{ $user['user_id'] }};
+const updateUrl = "{{ route('users.update', $user['user_id']) }}";
+
 function changeRole() {
-    // TODO: پیاده‌سازی تغییر نقش
-    alert('در حال توسعه');
+    swal({
+        title: "تغییر نقش کاربر",
+        text: "نقش جدید را انتخاب کنید:",
+        type: "input",
+        inputType: "select",
+        inputOptions: {
+            "customer": "مشتری",
+            "marketer": "بازاریاب",
+            "admin": "ادمین"
+        },
+        showCancelButton: true,
+        confirmButtonText: "تغییر نقش",
+        cancelButtonText: "لغو",
+        inputPlaceholder: "نقش را انتخاب کنید",
+        inputValidator: function(value) {
+            return new Promise(function(resolve, reject) {
+                if (value) {
+                    resolve();
+                } else {
+                    reject("لطفاً یک نقش انتخاب کنید");
+                }
+            });
+        }
+    }).then(function(result) {
+        if (result.value) {
+            fetch(updateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    action: 'change_role',
+                    role: result.value
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    swal("موفق!", "نقش کاربر با موفقیت تغییر کرد", "success")
+                        .then(() => location.reload());
+                } else {
+                    swal("خطا!", data.message || "خطایی رخ داد", "error");
+                }
+            })
+            .catch(error => {
+                swal("خطا!", "خطا در ارتباط با سرور", "error");
+            });
+        }
+    });
 }
 
 function addBalance() {
-    // TODO: پیاده‌سازی افزایش موجودی
-    alert('در حال توسعه');
+    swal({
+        title: "افزایش موجودی",
+        text: "مبلغ مورد نظر را وارد کنید (تومان):",
+        type: "input",
+        inputType: "number",
+        showCancelButton: true,
+        confirmButtonText: "افزایش موجودی",
+        cancelButtonText: "لغو",
+        inputPlaceholder: "مبلغ را وارد کنید",
+        inputValidator: function(value) {
+            return new Promise(function(resolve, reject) {
+                if (value && parseFloat(value) > 0) {
+                    resolve();
+                } else {
+                    reject("لطفاً یک مبلغ معتبر وارد کنید");
+                }
+            });
+        }
+    }).then(function(result) {
+        if (result.value) {
+            const amount = parseFloat(result.value);
+            fetch(updateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    action: 'add_balance',
+                    amount: amount
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    swal("موفق!", `موجودی کاربر ${amount.toLocaleString()} تومان افزایش یافت`, "success")
+                        .then(() => location.reload());
+                } else {
+                    swal("خطا!", data.message || "خطایی رخ داد", "error");
+                }
+            })
+            .catch(error => {
+                swal("خطا!", "خطا در ارتباط با سرور", "error");
+            });
+        }
+    });
 }
 
 function toggleStatus() {
-    if (confirm('آیا مطمئن هستید؟')) {
-        // TODO: پیاده‌سازی تغییر وضعیت
-        alert('در حال توسعه');
-    }
+    const currentStatus = {{ $user['is_active'] ? 'true' : 'false' }};
+    const statusText = currentStatus ? "مسدود" : "فعال";
+    
+    swal({
+        title: "تغییر وضعیت کاربر",
+        text: `آیا مطمئن هستید که می‌خواهید کاربر را ${statusText} کنید؟`,
+        type: "warning",
+        showCancelButton: true,
+        confirmButtonText: `بله، ${statusText} کن`,
+        cancelButtonText: "لغو",
+        confirmButtonColor: "#d33"
+    }).then(function(result) {
+        if (result.value) {
+            fetch(updateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({
+                    action: 'toggle_status'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    swal("موفق!", `وضعیت کاربر با موفقیت ${statusText} شد`, "success")
+                        .then(() => location.reload());
+                } else {
+                    swal("خطا!", data.message || "خطایی رخ داد", "error");
+                }
+            })
+            .catch(error => {
+                swal("خطا!", "خطا در ارتباط با سرور", "error");
+            });
+        }
+    });
 }
 </script>
 @endsection

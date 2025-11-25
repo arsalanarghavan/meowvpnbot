@@ -115,12 +115,18 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
     user = query.from_user
     plan = context.user_data.get('selected_plan')
     
+    # Validate plan before use
+    if not plan:
+        await query.edit_message_text(_('messages.error_general'))
+        return ConversationHandler.END
+    
     db = SessionLocal()
     try:
         db_user = user_queries.find_or_create_user(db, user.id)
 
         if db_user.wallet_balance < plan.price:
             await query.edit_message_text(_('messages.insufficient_balance', balance=db_user.wallet_balance))
+            db.rollback()
             return ConversationHandler.END
 
         await query.edit_message_text(_('messages.creating_service_multi_server'))
@@ -128,6 +134,7 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
         panels = panel_queries.get_all_panels(db)
         if not panels:
             await query.edit_message_text(_('messages.no_panels_configured'))
+            db.rollback()
             return ConversationHandler.END
             
         service_username = f"uid{user.id}-{uuid.uuid4().hex[:4]}"
@@ -148,6 +155,7 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
         
         if not user_details_list:
             await query.edit_message_text(_('messages.error_all_panels_failed'))
+            db.rollback()
             return ConversationHandler.END
 
         # --- If some panels failed, inform the admin but proceed for the user ---
@@ -175,6 +183,7 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 
     except Exception as e:
+        db.rollback()
         await query.edit_message_text(_('messages.error_general'))
         await log_error(context, e, "process_wallet_payment")
     finally:

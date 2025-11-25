@@ -3,6 +3,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from core.config import DATABASE_URL  # آدرس دیتابیس را از فایل تنظیمات می‌خوانیم
 
+# بررسی DATABASE_URL قبل از استفاده
+if not DATABASE_URL or DATABASE_URL == "your_database_url":
+    raise ValueError(
+        "DATABASE_URL is not set or is invalid! "
+        "Please set DATABASE_URL in .env file. "
+        "Example: DATABASE_URL=sqlite:///vpn_bot.db"
+    )
+
 # ایجاد موتور اصلی SQLAlchemy با استفاده از آدرس اتصال
 # pool_pre_ping=True به موتور دستور می‌دهد که قبل از هر عملیات، اتصال به دیتابیس را چک کند تا از قطعی جلوگیری شود
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)

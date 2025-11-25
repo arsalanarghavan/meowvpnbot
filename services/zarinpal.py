@@ -44,7 +44,7 @@ class Zarinpal:
             "metadata": {"order_id": str(transaction_id)}
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(ZARINPAL_API_REQUEST, json=payload)
                 response.raise_for_status()
@@ -84,7 +84,7 @@ class Zarinpal:
             "authority": authority
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(ZARINPAL_API_VERIFY, json=payload)
                 response.raise_for_status()

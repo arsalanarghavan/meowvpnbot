@@ -39,6 +39,10 @@ async def redeem_gift_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         await update.message.reply_text(_('messages.gift_code_success', amount=amount))
 
+    except Exception as e:
+        db.rollback()
+        await update.message.reply_text(_('messages.error_general'))
+        raise
     finally:
         db.close()
         
