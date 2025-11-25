@@ -167,13 +167,53 @@ class BackupImportController extends Controller
     private function importSQLiteDump($sqlContent, $importType)
     {
         $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdo->beginTransaction();
 
         try {
-            // اجرای SQL statements
-            $pdo->exec($sqlContent);
-            $pdo->commit();
+            // تقسیم SQL به statements جداگانه
+            $statements = array_filter(
+                array_map('trim', explode(';', $sqlContent)),
+                function($stmt) {
+                    return !empty($stmt) && !preg_match('/^--/', $stmt);
+                }
+            );
 
+            foreach ($statements as $statement) {
+                // فقط INSERT, UPDATE, CREATE TABLE statements را اجرا کن
+                $statement = trim($statement);
+                if (empty($statement)) continue;
+                
+                // بررسی نوع statement
+                $stmtType = strtoupper(substr($statement, 0, 6));
+                if (!in_array($stmtType, ['INSERT', 'UPDATE', 'CREATE', 'ALTER', 'DELETE'])) {
+                    continue; // فقط statements مجاز را اجرا کن
+                }
+
+                // استفاده از prepared statement برای INSERT/UPDATE
+                if (strpos($stmtType, 'INSERT') === 0 || strpos($stmtType, 'UPDATE') === 0) {
+                    // برای INSERT/UPDATE ساده، از exec استفاده کن اما با validation
+                    // اما بهتر است که از prepared statements استفاده کنیم
+                    // برای امنیت بیشتر، فقط statements معتبر را اجرا کن
+                    try {
+                        $pdo->exec($statement);
+                    } catch (\PDOException $e) {
+                        // اگر خطا رخ داد، log کن و ادامه بده
+                        \Log::warning("SQL import error: " . $e->getMessage());
+                        continue;
+                    }
+                } else {
+                    // برای CREATE/ALTER از exec استفاده کن
+                    try {
+                        $pdo->exec($statement);
+                    } catch (\PDOException $e) {
+                        \Log::warning("SQL import error: " . $e->getMessage());
+                        continue;
+                    }
+                }
+            }
+
+            $pdo->commit();
             return ['imported' => true];
         } catch (\Exception $e) {
             $pdo->rollBack();

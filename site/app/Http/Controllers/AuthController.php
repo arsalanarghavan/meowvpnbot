@@ -43,8 +43,17 @@ class AuthController extends Controller
             ])->withInput($request->only('username'));
         }
 
-        // بررسی ادمین
-        if ($username === $adminUsername && $password === $adminPassword) {
+        // بررسی ادمین - اگر password hash شده باشد، از password_verify استفاده کن
+        $isPasswordValid = false;
+        if (password_needs_rehash($adminPassword, PASSWORD_DEFAULT) === false && password_verify($password, $adminPassword)) {
+            // Password hash شده و معتبر است
+            $isPasswordValid = true;
+        } elseif ($username === $adminUsername && $password === $adminPassword) {
+            // برای backward compatibility - اگر password plain text باشد
+            $isPasswordValid = true;
+        }
+        
+        if ($username === $adminUsername && $isPasswordValid) {
             session([
                 'user_authenticated' => true,
                 'user_role' => 'admin',

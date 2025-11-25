@@ -100,8 +100,23 @@ class SetupWizardController extends Controller
             return back()->withErrors(['username' => 'خطا در خواندن فایل .env!'])->withInput();
         }
 
-        $envContent = preg_replace('/ADMIN_USERNAME=.*/', 'ADMIN_USERNAME=' . $request->username, $envContent);
-        $envContent = preg_replace('/ADMIN_PASSWORD=.*/', 'ADMIN_PASSWORD=' . $request->password, $envContent);
+        // Hash کردن password قبل از ذخیره
+        $hashedPassword = password_hash($request->password, PASSWORD_DEFAULT);
+        
+        $usernameEscaped = addslashes($request->username);
+        $passwordEscaped = addslashes($hashedPassword);
+        
+        $envContent = preg_replace('/ADMIN_USERNAME=.*/', 'ADMIN_USERNAME=' . $usernameEscaped, $envContent);
+        $envContent = preg_replace('/ADMIN_PASSWORD=.*/', 'ADMIN_PASSWORD=' . $passwordEscaped, $envContent);
+        
+        // اگر متغیر وجود نداشت، اضافه کن
+        if (strpos($envContent, 'ADMIN_USERNAME=') === false) {
+            $envContent .= "\nADMIN_USERNAME={$usernameEscaped}\n";
+        }
+        if (strpos($envContent, 'ADMIN_PASSWORD=') === false) {
+            $envContent .= "\nADMIN_PASSWORD={$passwordEscaped}\n";
+        }
+        
         $envContent = preg_replace('/FIRST_RUN=true/', 'FIRST_RUN=false', $envContent);
 
         // نوشتن با بررسی مجوز
@@ -110,7 +125,9 @@ class SetupWizardController extends Controller
             // اگر نوشتن با خطا مواجه شد، با sudo امتحان کن
             $tempFile = sys_get_temp_dir() . '/env_update_' . uniqid();
             file_put_contents($tempFile, $envContent);
-            exec("sudo mv $tempFile $envPath 2>&1", $output, $returnCode);
+            $tempFileEscaped = escapeshellarg($tempFile);
+            $envPathEscaped = escapeshellarg($envPath);
+            exec("sudo mv {$tempFileEscaped} {$envPathEscaped} 2>&1", $output, $returnCode);
             if ($returnCode !== 0) {
                 return back()->withErrors(['username' => 'خطا در نوشتن فایل .env! لطفاً مجوزها را بررسی کنید.'])->withInput();
             }
@@ -152,9 +169,31 @@ class SetupWizardController extends Controller
     public function saveStep1(Request $request)
     {
         $request->validate([
-            'bot_token' => 'required',
-            'bot_username' => 'required',
-            'admin_telegram_id' => 'required|numeric',
+            'bot_token' => [
+                'required',
+                'regex:/^\d+:[A-Za-z0-9_-]+$/',
+            ],
+            'bot_username' => [
+                'required',
+                'regex:/^[a-zA-Z0-9_]+$/',
+                'min:3',
+                'max:32',
+            ],
+            'admin_telegram_id' => [
+                'required',
+                'numeric',
+                'min:1',
+            ],
+        ], [
+            'bot_token.required' => 'توکن ربات الزامی است.',
+            'bot_token.regex' => 'فرمت توکن ربات نامعتبر است. فرمت صحیح: 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11',
+            'bot_username.required' => 'یوزرنیم ربات الزامی است.',
+            'bot_username.regex' => 'یوزرنیم ربات باید فقط شامل حروف انگلیسی، اعداد و _ باشد.',
+            'bot_username.min' => 'یوزرنیم ربات باید حداقل 3 کاراکتر باشد.',
+            'bot_username.max' => 'یوزرنیم ربات نباید بیشتر از 32 کاراکتر باشد.',
+            'admin_telegram_id.required' => 'Telegram ID ادمین الزامی است.',
+            'admin_telegram_id.numeric' => 'Telegram ID باید عدد باشد.',
+            'admin_telegram_id.min' => 'Telegram ID باید بزرگتر از 0 باشد.',
         ]);
 
         session([
@@ -223,6 +262,29 @@ class SetupWizardController extends Controller
      */
     public function saveStep3(Request $request)
     {
+        $request->validate([
+            'zarinpal_merchant' => [
+                'nullable',
+                'regex:/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i',
+            ],
+            'support_username' => [
+                'nullable',
+                'regex:/^[a-zA-Z0-9_]+$/',
+                'max:32',
+            ],
+            'channel_id' => [
+                'nullable',
+                'regex:/^@?[a-zA-Z0-9_]+$/',
+                'max:100',
+            ],
+        ], [
+            'zarinpal_merchant.regex' => 'فرمت Merchant ID زرین‌پال نامعتبر است. فرمت صحیح: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+            'support_username.regex' => 'یوزرنیم پشتیبانی باید فقط شامل حروف انگلیسی، اعداد و _ باشد.',
+            'support_username.max' => 'یوزرنیم پشتیبانی نباید بیشتر از 32 کاراکتر باشد.',
+            'channel_id.regex' => 'آیدی کانال نامعتبر است. می‌تواند با @ شروع شود یا بدون آن.',
+            'channel_id.max' => 'آیدی کانال نباید بیشتر از 100 کاراکتر باشد.',
+        ]);
+
         session([
             'setup_step3' => [
                 'zarinpal_merchant' => $request->zarinpal_merchant ?? '',
@@ -331,7 +393,11 @@ class SetupWizardController extends Controller
         $envContent .= "SUPPORT_USERNAME={$step3['support_username']}\n";
         $envContent .= "CHANNEL_LOCK_ID={$step3['channel_id']}\n";
 
-        file_put_contents($this->projectRoot . '/.env', $envContent);
+        $envFilePath = $this->projectRoot . '/.env';
+        $result = file_put_contents($envFilePath, $envContent);
+        if ($result === false) {
+            throw new \Exception('خطا در نوشتن فایل .env ربات! لطفاً مجوزها را بررسی کنید.');
+        }
     }
 
     /**
@@ -340,12 +406,29 @@ class SetupWizardController extends Controller
     private function installBotDependencies()
     {
         $venvPath = $this->projectRoot . '/venv';
+        $projectRootEscaped = escapeshellarg($this->projectRoot);
 
         if (!file_exists($venvPath)) {
-            shell_exec("cd {$this->projectRoot} && python3 -m venv venv");
+            $venvPathEscaped = escapeshellarg($venvPath);
+            $output = shell_exec("cd {$projectRootEscaped} && python3 -m venv {$venvPathEscaped} 2>&1");
+            if (!file_exists($venvPath . '/bin/python')) {
+                throw new \Exception("خطا در ایجاد virtual environment: " . ($output ?: 'خطای نامشخص'));
+            }
         }
 
-        shell_exec("cd {$this->projectRoot} && source venv/bin/activate && pip install -r requirements.txt 2>&1");
+        // استفاده مستقیم از venv/bin/pip به جای source activate
+        $pipPath = $venvPath . '/bin/pip';
+        if (!file_exists($pipPath)) {
+            throw new \Exception("pip در virtual environment یافت نشد!");
+        }
+
+        $output = shell_exec("cd {$projectRootEscaped} && {$pipPath} install -r requirements.txt 2>&1");
+        if ($output && (strpos($output, 'ERROR') !== false || strpos($output, 'error') !== false)) {
+            // اگر خطای جدی وجود دارد، throw exception
+            if (strpos($output, 'No such file') !== false || strpos($output, 'Permission denied') !== false) {
+                throw new \Exception("خطا در نصب dependencies: " . $output);
+            }
+        }
     }
 
     /**
@@ -353,7 +436,38 @@ class SetupWizardController extends Controller
      */
     private function runMigrations()
     {
-        shell_exec("cd {$this->projectRoot} && source venv/bin/activate && alembic upgrade head 2>&1");
+        $venvPath = $this->projectRoot . '/venv';
+        $alembicPath = $venvPath . '/bin/alembic';
+        $projectRootEscaped = escapeshellarg($this->projectRoot);
+
+        if (!file_exists($alembicPath)) {
+            // اگر alembic نصب نشده، سعی کن نصب کنی
+            $pipPath = $venvPath . '/bin/pip';
+            if (file_exists($pipPath)) {
+                shell_exec("cd {$projectRootEscaped} && {$pipPath} install alembic 2>&1");
+            }
+        }
+
+        if (!file_exists($alembicPath)) {
+            // اگر هنوز نیست، دیتابیس را با create_database.py بساز
+            $createDbPath = $this->projectRoot . '/create_database.py';
+            if (file_exists($createDbPath)) {
+                $pythonPath = $venvPath . '/bin/python';
+                $output = shell_exec("cd {$projectRootEscaped} && {$pythonPath} create_database.py 2>&1");
+                if ($output && strpos($output, 'ERROR') !== false) {
+                    throw new \Exception("خطا در ایجاد دیتابیس: " . $output);
+                }
+            }
+            return; // اگر alembic نیست، از create_database استفاده کردیم
+        }
+
+        $output = shell_exec("cd {$projectRootEscaped} && {$alembicPath} upgrade head 2>&1");
+        if ($output && (strpos($output, 'ERROR') !== false || strpos($output, 'error') !== false)) {
+            // اگر خطای جدی وجود دارد
+            if (strpos($output, 'No such file') !== false || strpos($output, 'Permission denied') !== false) {
+                throw new \Exception("خطا در اجرای migrations: " . $output);
+            }
+        }
     }
 
     /**
@@ -363,11 +477,30 @@ class SetupWizardController extends Controller
     {
         $dbPath = $this->projectRoot . '/vpn_bot.db';
 
+        // بررسی وجود دیتابیس - اگر وجود نداشت، ایجاد کن
         if (!file_exists($dbPath)) {
-            throw new \Exception('دیتابیس یافت نشد!');
+            // سعی کن دیتابیس را با create_database.py ایجاد کنی
+            $createDbPath = $this->projectRoot . '/create_database.py';
+            if (file_exists($createDbPath)) {
+                $venvPath = $this->projectRoot . '/venv';
+                $pythonPath = $venvPath . '/bin/python';
+                if (file_exists($pythonPath)) {
+                    $projectRootEscaped = escapeshellarg($this->projectRoot);
+                    $pythonPathEscaped = escapeshellarg($pythonPath);
+                    $output = shell_exec("cd {$projectRootEscaped} && {$pythonPathEscaped} create_database.py 2>&1");
+                    if (!file_exists($dbPath)) {
+                        throw new \Exception('خطا در ایجاد دیتابیس: ' . ($output ?: 'خطای نامشخص'));
+                    }
+                } else {
+                    throw new \Exception('Python در venv یافت نشد! لطفاً ابتدا dependencies را نصب کنید.');
+                }
+            } else {
+                throw new \Exception('دیتابیس یافت نشد و create_database.py نیز موجود نیست!');
+            }
         }
 
         $pdo = new \PDO("sqlite:$dbPath");
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         $stmt = $pdo->prepare("
             INSERT INTO panels (name, panel_type, api_base_url, username, password, is_active)
@@ -389,7 +522,14 @@ class SetupWizardController extends Controller
     private function saveSettingsToDatabase($settings)
     {
         $dbPath = $this->projectRoot . '/vpn_bot.db';
+        
+        // بررسی وجود دیتابیس
+        if (!file_exists($dbPath)) {
+            throw new \Exception('دیتابیس یافت نشد! لطفاً ابتدا migrations را اجرا کنید.');
+        }
+
         $pdo = new \PDO("sqlite:$dbPath");
+        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         $settingsMap = [
             'zarinpal_merchant_id' => $settings['zarinpal_merchant'],
@@ -414,26 +554,64 @@ class SetupWizardController extends Controller
      */
     private function createSystemdService()
     {
+        // پیدا کردن python executable در venv
+        $pythonPath = $this->projectRoot . '/venv/bin/python';
+        if (!file_exists($pythonPath)) {
+            $pythonPath = $this->projectRoot . '/venv/bin/python3';
+        }
+        if (!file_exists($pythonPath)) {
+            throw new \Exception("Python در venv یافت نشد!");
+        }
+
+        $projectRootEscaped = escapeshellarg($this->projectRoot);
+        $pythonPathEscaped = escapeshellarg($pythonPath);
+        $mainPyEscaped = escapeshellarg($this->projectRoot . '/main.py');
+
+        // استفاده از www-data به جای get_current_user
+        $serviceUser = 'www-data';
+        // اگر www-data وجود ندارد، از کاربر فعلی استفاده کن
+        if (!posix_getpwnam($serviceUser)) {
+            $serviceUser = get_current_user();
+        }
+
         $serviceContent = "[Unit]\n";
         $serviceContent .= "Description=MeowVPN Telegram Bot\n";
         $serviceContent .= "After=network.target\n\n";
         $serviceContent .= "[Service]\n";
         $serviceContent .= "Type=simple\n";
-        $serviceContent .= "User=" . get_current_user() . "\n";
-        $serviceContent .= "WorkingDirectory={$this->projectRoot}\n";
-        $serviceContent .= "Environment=\"PATH={$this->projectRoot}/venv/bin\"\n";
-        $serviceContent .= "ExecStart={$this->projectRoot}/venv/bin/python main.py\n";
+        $serviceContent .= "User={$serviceUser}\n";
+        $serviceContent .= "WorkingDirectory={$projectRootEscaped}\n";
+        $serviceContent .= "Environment=\"PATH={$projectRootEscaped}/venv/bin\"\n";
+        $serviceContent .= "ExecStart={$pythonPathEscaped} {$mainPyEscaped}\n";
         $serviceContent .= "Restart=always\n";
-        $serviceContent .= "RestartSec=10\n\n";
+        $serviceContent .= "RestartSec=10\n";
+        $serviceContent .= "StartLimitInterval=0\n";
+        $serviceContent .= "StartLimitBurst=10\n\n";
         $serviceContent .= "[Install]\n";
         $serviceContent .= "WantedBy=multi-user.target\n";
 
-        file_put_contents('/tmp/meowvpnbot.service', $serviceContent);
+        $serviceFile = '/tmp/meowvpn-bot.service';
+        $result = @file_put_contents($serviceFile, $serviceContent);
+        if ($result === false) {
+            throw new \Exception("خطا در ایجاد فایل systemd service! لطفاً مجوزها را بررسی کنید.");
+        }
 
         // نصب service (نیاز به sudo دارد)
-        shell_exec("sudo mv /tmp/meowvpnbot.service /etc/systemd/system/ 2>&1");
-        shell_exec("sudo systemctl daemon-reload 2>&1");
-        shell_exec("sudo systemctl enable meowvpnbot 2>&1");
+        $serviceFileEscaped = escapeshellarg($serviceFile);
+        $output = shell_exec("sudo mv {$serviceFileEscaped} /etc/systemd/system/meowvpn-bot.service 2>&1");
+        if ($output && strpos($output, 'Permission denied') !== false) {
+            throw new \Exception("خطا در نصب systemd service: " . $output);
+        }
+
+        $output = shell_exec("sudo systemctl daemon-reload 2>&1");
+        if ($output && strpos($output, 'Failed') !== false) {
+            throw new \Exception("خطا در reload systemd: " . $output);
+        }
+
+        $output = shell_exec("sudo systemctl enable meowvpn-bot.service 2>&1");
+        if ($output && strpos($output, 'Failed') !== false) {
+            throw new \Exception("خطا در enable کردن سرویس: " . $output);
+        }
     }
 
     /**
@@ -441,12 +619,20 @@ class SetupWizardController extends Controller
      */
     private function startBot()
     {
-        // تلاش برای استفاده از systemd
-        $result = shell_exec("sudo systemctl start meowvpnbot 2>&1");
+        $projectRootEscaped = escapeshellarg($this->projectRoot);
+        $pythonPath = escapeshellarg($this->projectRoot . '/venv/bin/python');
+        $mainPyPath = escapeshellarg($this->projectRoot . '/main.py');
 
-        if (strpos($result, 'Failed') !== false) {
+        // تلاش برای استفاده از systemd
+        $output = shell_exec("sudo systemctl start meowvpn-bot.service 2>&1");
+
+        if ($output && (strpos($output, 'Failed') !== false || strpos($output, 'not found') !== false)) {
             // اگر systemd کار نکرد، background اجرا کن
-            shell_exec("cd {$this->projectRoot} && nohup venv/bin/python main.py > bot.log 2>&1 &");
+            $logFile = escapeshellarg($this->projectRoot . '/bot.log');
+            $output = shell_exec("cd {$projectRootEscaped} && nohup {$pythonPath} {$mainPyPath} > {$logFile} 2>&1 &");
+            if ($output && strpos($output, 'Permission denied') !== false) {
+                throw new \Exception("خطا در راه‌اندازی ربات: " . $output);
+            }
         }
     }
 
@@ -462,7 +648,18 @@ class SetupWizardController extends Controller
         $envContent = preg_replace('/SETUP_WIZARD_ENABLED=true/', 'SETUP_WIZARD_ENABLED=false', $envContent);
         $envContent = preg_replace('/BOT_INSTALLED=false/', 'BOT_INSTALLED=true', $envContent);
 
-        file_put_contents($envPath, $envContent);
+        $result = @file_put_contents($envPath, $envContent);
+        if ($result === false) {
+            // اگر نوشتن با خطا مواجه شد، با sudo امتحان کن
+            $tempFile = sys_get_temp_dir() . '/env_update_' . uniqid();
+            file_put_contents($tempFile, $envContent);
+            $tempFileEscaped = escapeshellarg($tempFile);
+            $envPathEscaped = escapeshellarg($envPath);
+            exec("sudo mv {$tempFileEscaped} {$envPathEscaped} 2>&1", $output, $returnCode);
+            if ($returnCode !== 0) {
+                throw new \Exception('خطا در نوشتن فایل .env! لطفاً مجوزها را بررسی کنید.');
+            }
+        }
 
         // پاک کردن کش
         Artisan::call('config:clear');
