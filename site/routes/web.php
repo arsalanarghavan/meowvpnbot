@@ -15,8 +15,8 @@ use App\Http\Controllers\GiftCardController;
 use App\Http\Controllers\CardAccountController;
 use App\Http\Controllers\SettingController;
 
-// Setup Wizard (بدون middleware)
-Route::prefix('setup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
+// Setup Wizard
+Route::prefix('setup')->group(function () {
     Route::get('/', [SetupWizardController::class, 'index'])->name('setup');
     Route::get('/welcome', [SetupWizardController::class, 'welcome'])->name('setup.welcome');
     Route::post('/welcome', [SetupWizardController::class, 'saveWelcome'])->name('setup.welcome.save');
@@ -31,8 +31,8 @@ Route::prefix('setup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupCompl
     Route::post('/install', [SetupWizardController::class, 'install'])->name('setup.install');
 });
 
-// Backup Import Routes (بدون middleware)
-Route::prefix('backup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
+// Backup Import Routes
+Route::prefix('backup')->group(function () {
     Route::post('/analyze', [BackupImportController::class, 'analyze'])->name('backup.analyze');
     Route::post('/import', [BackupImportController::class, 'import'])->name('backup.import');
     Route::get('/sample', [BackupImportController::class, 'downloadSample'])->name('backup.sample');
@@ -59,15 +59,13 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-// صفحات احراز هویت (بدون middleware)
-Route::withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
-    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])->name('login.post');
-    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-});
+// صفحات احراز هویت
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // تمام صفحات محافظت شده با middleware
-Route::middleware(['web', App\Http\Middleware\Authenticate::class, App\Http\Middleware\RedirectIfSetupNeeded::class])->group(function () {
+Route::middleware(['web', App\Http\Middleware\Authenticate::class, App\Http\Middleware\RedirectIfSetupNeeded::class, App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
 
 // صفحه اصلی - داشبورد
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
