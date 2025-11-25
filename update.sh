@@ -85,7 +85,7 @@ fi
 # بررسی وجود ربات در حال اجرا
 print_step "بررسی وضعیت ربات..."
 BOT_RUNNING=false
-if systemctl is-active --quiet meowvpnbot.service 2>/dev/null; then
+if systemctl is-active --quiet meowvpn-bot.service 2>/dev/null; then
     BOT_RUNNING=true
     print_info "ربات در حال اجرا با systemd است"
 elif pgrep -f "python.*main.py" > /dev/null; then
@@ -98,8 +98,8 @@ fi
 # توقف ربات
 if [ "$BOT_RUNNING" = true ]; then
     print_step "توقف ربات..."
-    if systemctl is-active --quiet meowvpnbot.service 2>/dev/null; then
-        sudo systemctl stop meowvpnbot
+    if systemctl is-active --quiet meowvpn-bot.service 2>/dev/null; then
+        sudo systemctl stop meowvpn-bot
         print_success "ربات متوقف شد (systemd)"
     else
         pkill -f "python.*main.py" || true

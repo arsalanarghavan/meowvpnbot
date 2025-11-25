@@ -27,8 +27,19 @@ RECOMMENDED_PATH="/var/www/meowvpnbot"
 NEEDS_MOVE=false
 
 # اگر در /root هستیم، باید به /var/www منتقل کنیم
+# اما اگر قبلاً در /var/www هستیم، نیازی به انتقال نیست
 if [[ "$PROJECT_ROOT" == /root/* ]]; then
-    NEEDS_MOVE=true
+    # چک می‌کنیم که آیا قبلاً در /var/www نصب شده یا نه
+    if [ ! -d "$RECOMMENDED_PATH" ]; then
+        NEEDS_MOVE=true
+    else
+        # اگر در /var/www قبلاً نصب شده، از همان استفاده می‌کنیم
+        print_info "نصب قبلی در $RECOMMENDED_PATH یافت شد"
+        PROJECT_ROOT="$RECOMMENDED_PATH"
+        SITE_DIR="$PROJECT_ROOT/site"
+        cd "$PROJECT_ROOT"
+        NEEDS_MOVE=false
+    fi
 fi
 
 # متغیرهای نصب
@@ -154,9 +165,13 @@ if [ "$NEEDS_MOVE" = true ]; then
     echo ""
     
     # بکاپ از فایل‌های مهم (در صورت وجود)
-    if [ -f "$PROJECT_ROOT/bot.db" ]; then
+    if [ -f "$PROJECT_ROOT/vpn_bot.db" ]; then
         print_info "بکاپ از دیتابیس..."
-        cp "$PROJECT_ROOT/bot.db" /tmp/bot_backup.db 2>/dev/null || true
+        cp "$PROJECT_ROOT/vpn_bot.db" /tmp/vpn_bot_backup.db 2>/dev/null || true
+    elif [ -f "$PROJECT_ROOT/bot.db" ]; then
+        # پشتیبانی از نام قدیمی
+        print_info "بکاپ از دیتابیس (نام قدیمی)..."
+        cp "$PROJECT_ROOT/bot.db" /tmp/vpn_bot_backup.db 2>/dev/null || true
     fi
     
     # حذف مسیر قدیمی در /var/www اگر وجود داشت
@@ -173,9 +188,9 @@ if [ "$NEEDS_MOVE" = true ]; then
     sudo cp -r "$PROJECT_ROOT" "$RECOMMENDED_PATH"
     
     # بازگرداندن بکاپ
-    if [ -f "/tmp/bot_backup.db" ]; then
-        sudo cp /tmp/bot_backup.db "$RECOMMENDED_PATH/bot.db"
-        rm /tmp/bot_backup.db
+    if [ -f "/tmp/vpn_bot_backup.db" ]; then
+        sudo cp /tmp/vpn_bot_backup.db "$RECOMMENDED_PATH/vpn_bot.db"
+        rm /tmp/vpn_bot_backup.db
     fi
     
     # تنظیم مجوزهای اولیه
@@ -191,7 +206,10 @@ if [ "$NEEDS_MOVE" = true ]; then
     # اجرای مجدد اسکریپت از مسیر جدید
     print_info "ادامه نصب از مسیر جدید..."
     cd "$RECOMMENDED_PATH"
-    exec "$RECOMMENDED_PATH/install.sh"
+    # استفاده از exec برای جایگزینی process و جلوگیری از loop
+    # همچنین NEEDS_MOVE را false می‌کنیم تا دوباره منتقل نشود
+    NEEDS_MOVE=false
+    exec bash "$RECOMMENDED_PATH/install.sh"
     exit 0
 fi
 
@@ -253,7 +271,7 @@ print_step "ایجاد virtual environment..."
 # اطمینان از حذف venv خراب
 if [ -d "venv" ]; then
     # چک کردن سلامت venv
-    if [ ! -f "venv/bin/activate" ] || [ ! -f "venv/bin/python" ] && [ ! -f "venv/bin/python3" ]; then
+    if [ ! -f "venv/bin/activate" ] || ([ ! -f "venv/bin/python" ] && [ ! -f "venv/bin/python3" ]); then
         print_warning "Virtual environment خراب یا ناقص است، در حال حذف..."
         rm -rf venv
     fi
@@ -359,11 +377,51 @@ fi
 
 # اجرای migrations
 print_step "اجرای database migrations..."
+
+# چک کردن DATABASE_URL در .env
+if [ -f ".env" ]; then
+    DATABASE_URL=$(grep "^DATABASE_URL=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" || echo "")
+    if [ -z "$DATABASE_URL" ] || [ "$DATABASE_URL" = "your_database_url" ] || [ "$DATABASE_URL" = "sqlite:///vpn_bot.db" ]; then
+        # اگر DATABASE_URL خالی یا پیش‌فرض است، از پیش‌فرض SQLite استفاده می‌کنیم
+        export DATABASE_URL="sqlite:///vpn_bot.db"
+        print_info "استفاده از دیتابیس پیش‌فرض SQLite"
+    else
+        export DATABASE_URL="$DATABASE_URL"
+        print_info "استفاده از DATABASE_URL از فایل .env"
+    fi
+else
+    export DATABASE_URL="sqlite:///vpn_bot.db"
+    print_warning "فایل .env یافت نشد، استفاده از دیتابیس پیش‌فرض SQLite"
+fi
+
 if [ -f "$VENV_BIN/alembic" ]; then
-    $VENV_BIN/alembic upgrade head 2>/dev/null && print_success "Migrations اجرا شدند" || print_info "دیتابیس آماده است"
+    # اجرای migrations با مدیریت خطا بهتر
+    if $VENV_BIN/alembic upgrade head 2>&1; then
+        print_success "Migrations اجرا شدند"
+    else
+        MIGRATION_ERROR=$?
+        print_warning "خطا در اجرای migrations (کد: $MIGRATION_ERROR)"
+        print_info "دیتابیس ممکن است نیاز به ساخت دستی داشته باشد"
+        
+        # اگر SQLite است، فایل را ایجاد کن
+        if [[ "$DATABASE_URL" == sqlite* ]]; then
+            DB_FILE=$(echo "$DATABASE_URL" | sed 's/sqlite:\/\/\///')
+            if [ ! -f "$DB_FILE" ]; then
+                touch "$DB_FILE" 2>/dev/null || true
+                print_info "فایل دیتابیس SQLite ایجاد شد: $DB_FILE"
+            fi
+        fi
+    fi
 else
     # اگر alembic نیست، دیتابیس خالی بساز
-    touch bot.db
+    print_info "Alembic یافت نشد، دیتابیس توسط SQLAlchemy ساخته خواهد شد"
+    if [[ "$DATABASE_URL" == sqlite* ]]; then
+        DB_FILE=$(echo "$DATABASE_URL" | sed 's/sqlite:\/\/\///')
+        if [ ! -f "$DB_FILE" ]; then
+            touch "$DB_FILE" 2>/dev/null || true
+            print_info "فایل دیتابیس SQLite ایجاد شد: $DB_FILE"
+        fi
+    fi
     print_success "دیتابیس آماده است"
 fi
 
@@ -743,7 +801,7 @@ NGINXCONF
                 
                 echo ""
                 read -p "آیا می‌خواهید بدون SSL ادامه دهید؟ (y/n) " -n 1 -r
-                echo
+                echo ""
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
                     print_warning "ادامه بدون SSL - بعداً می‌توانید نصب کنید"
                     PANEL_URL="http://$PANEL_DOMAIN"
@@ -787,7 +845,15 @@ else
     # اگر فایل نبود، دستی ایجاد کن
     print_step "ایجاد Systemd service..."
     
-    CURRENT_DIR=$(pwd)
+    # پیدا کردن python executable در venv
+    if [ -f "$PROJECT_ROOT/venv/bin/python3" ]; then
+        PYTHON_EXE="$PROJECT_ROOT/venv/bin/python3"
+    elif [ -f "$PROJECT_ROOT/venv/bin/python" ]; then
+        PYTHON_EXE="$PROJECT_ROOT/venv/bin/python"
+    else
+        print_error "Python در venv یافت نشد!"
+        exit 1
+    fi
     
     sudo tee /etc/systemd/system/meowvpn-bot.service > /dev/null <<EOF
 [Unit]
@@ -800,7 +866,7 @@ Type=simple
 User=www-data
 WorkingDirectory=$PROJECT_ROOT
 Environment="PATH=$PROJECT_ROOT/venv/bin"
-ExecStart=$PROJECT_ROOT/venv/bin/python main.py
+ExecStart=$PYTHON_EXE main.py
 
 # Auto-restart settings - همیشه ریستارت شود
 Restart=always
@@ -913,15 +979,15 @@ if [ "$WEBSITE_INSTALLED" = "true" ]; then
     # نمایش QR Code (اگر qrencode نصب باشد)
     if command -v qrencode &> /dev/null; then
         echo -e "${CYAN}📱 یا اسکن QR Code:${NC}"
-        echo ""
+echo ""
         qrencode -t ANSIUTF8 "$SETUP_URL"
-        echo ""
+echo ""
     fi
     
     echo -e "${YELLOW}💡 نکته:${NC} Setup Wizard فقط یک بار قابل اجرا است."
     echo -e "   بعد از تکمیل، ربات خودکار راه‌اندازی و همیشه در حال اجرا خواهد بود."
-    echo ""
-    
+echo ""
+
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                  🔧 دستورات مفید                        ║${NC}"
