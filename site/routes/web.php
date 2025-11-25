@@ -15,6 +15,11 @@ use App\Http\Controllers\GiftCardController;
 use App\Http\Controllers\CardAccountController;
 use App\Http\Controllers\SettingController;
 
+// Test route (برای دیباگ)
+Route::get('/test', function () {
+    return response('OK - No redirect', 200);
+});
+
 // Setup Wizard
 Route::prefix('setup')->group(function () {
     Route::get('/', [SetupWizardController::class, 'index'])->name('setup');

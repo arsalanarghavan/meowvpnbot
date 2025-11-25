@@ -17,6 +17,7 @@ class EnsureSetupCompleted
     public function handle(Request $request, Closure $next)
     {
         // اگر در مسیر setup، backup یا login هستیم، همیشه ادامه بده (بدون هیچ redirect)
+        // این باید اول باشه تا هیچ redirect نشه
         if ($request->is('setup*') || $request->is('backup*') || $request->is('login*')) {
             return $next($request);
         }
