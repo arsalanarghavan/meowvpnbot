@@ -88,13 +88,33 @@ class SetupWizardController extends Controller
 
         // ذخیره در .env
         $envPath = base_path('.env');
+        
+        // بررسی وجود فایل
+        if (!file_exists($envPath)) {
+            return back()->withErrors(['username' => 'فایل .env یافت نشد!'])->withInput();
+        }
+        
+        // خواندن محتوا
         $envContent = file_get_contents($envPath);
+        if ($envContent === false) {
+            return back()->withErrors(['username' => 'خطا در خواندن فایل .env!'])->withInput();
+        }
 
         $envContent = preg_replace('/ADMIN_USERNAME=.*/', 'ADMIN_USERNAME=' . $request->username, $envContent);
         $envContent = preg_replace('/ADMIN_PASSWORD=.*/', 'ADMIN_PASSWORD=' . $request->password, $envContent);
         $envContent = preg_replace('/FIRST_RUN=true/', 'FIRST_RUN=false', $envContent);
 
-        file_put_contents($envPath, $envContent);
+        // نوشتن با بررسی مجوز
+        $result = @file_put_contents($envPath, $envContent);
+        if ($result === false) {
+            // اگر نوشتن با خطا مواجه شد، با sudo امتحان کن
+            $tempFile = sys_get_temp_dir() . '/env_update_' . uniqid();
+            file_put_contents($tempFile, $envContent);
+            exec("sudo mv $tempFile $envPath 2>&1", $output, $returnCode);
+            if ($returnCode !== 0) {
+                return back()->withErrors(['username' => 'خطا در نوشتن فایل .env! لطفاً مجوزها را بررسی کنید.'])->withInput();
+            }
+        }
 
         // پاک کردن cache
         \Artisan::call('config:clear');

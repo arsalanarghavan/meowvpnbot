@@ -493,9 +493,19 @@ ENVFILE
     # تنظیم ownership
     if command -v www-data &> /dev/null || id -u www-data &> /dev/null 2>&1; then
         sudo chown -R www-data:www-data storage bootstrap/cache
+        # مجوز نوشتن برای .env
+        if [ -f ".env" ]; then
+            sudo chown www-data:www-data .env
+            sudo chmod 664 .env
+        fi
         print_success "مجوزهای www-data تنظیم شد"
     elif command -v nginx &> /dev/null || id -u nginx &> /dev/null 2>&1; then
         sudo chown -R nginx:nginx storage bootstrap/cache
+        # مجوز نوشتن برای .env
+        if [ -f ".env" ]; then
+            sudo chown nginx:nginx .env
+            sudo chmod 664 .env
+        fi
         print_success "مجوزهای nginx تنظیم شد"
     fi
     
@@ -750,6 +760,11 @@ NGINXCONF
     
     # تنظیم مجوزها برای www-data
     sudo chown -R www-data:www-data "$SITE_DIR/storage" "$SITE_DIR/bootstrap/cache"
+    # مجوز نوشتن برای .env
+    if [ -f "$SITE_DIR/.env" ]; then
+        sudo chown www-data:www-data "$SITE_DIR/.env"
+        sudo chmod 664 "$SITE_DIR/.env"
+    fi
     
     print_success "سرور وب آماده است"
     
