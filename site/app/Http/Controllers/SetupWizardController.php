@@ -24,13 +24,16 @@ class SetupWizardController extends Controller
             // سعی کن مسیرهای رایج را چک کنی
             $possiblePaths = [
                 '/var/www/meowvpnbot',
+                '/mnt/1AF200F7F200D941/Projects/Bots/meowvpnbot',
                 dirname($basePath),
                 base_path('..'),
+                realpath(base_path('..')),
             ];
             
             foreach ($possiblePaths as $path) {
-                if (is_dir($path) && file_exists($path . '/main.py')) {
+                if ($path && is_dir($path) && file_exists($path . '/main.py')) {
                     $this->projectRoot = $path;
+                    \Log::info("SetupWizard: Found project root at: {$path}");
                     break;
                 }
             }

@@ -122,11 +122,23 @@
             addLog('شروع فرآیند نصب...');
             addLog('ایجاد فایل تنظیمات ربات...');
 
+            var installUrl = '{{ route("setup.install") }}';
+            addLog('URL نصب: ' + installUrl);
+            
             $.ajax({
-                url: '{{ route("setup.install") }}',
+                url: installUrl,
                 method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
                 data: {
                     _token: '{{ csrf_token() }}'
+                },
+                timeout: 300000, // 5 minutes timeout
+                beforeSend: function() {
+                    addLog('در حال ارسال درخواست به سرور...');
                 },
                 success: function(response) {
                     if (response.success) {
@@ -149,8 +161,21 @@
                         btnText.text('🚀 شروع نصب');
                     }
                 },
-                error: function(xhr) {
+                error: function(xhr, status, error) {
                     var errorMessage = 'خطای ناشناخته';
+                    
+                    // بررسی نوع خطا
+                    if (status === 'timeout') {
+                        errorMessage = 'زمان درخواست به پایان رسید. این فرآیند ممکن است چند دقیقه طول بکشد.';
+                    } else if (status === 'abort') {
+                        errorMessage = 'درخواست لغو شد.';
+                    } else if (xhr.status === 0) {
+                        errorMessage = 'خطا در اتصال به سرور. لطفاً اتصال اینترنت و تنظیمات سرور را بررسی کنید.';
+                    } else if (xhr.status === 419) {
+                        errorMessage = 'خطای CSRF Token. لطفاً صفحه را refresh کنید و دوباره تلاش کنید.';
+                    } else if (xhr.status === 500) {
+                        errorMessage = 'خطای داخلی سرور. لطفاً لاگ‌های سرور را بررسی کنید.';
+                    }
                     
                     // تلاش برای دریافت پیام خطا از response
                     if (xhr.responseJSON) {
@@ -174,11 +199,12 @@
                     }
                     
                     addLog('✗ خطای سرور: ' + errorMessage);
-                    addLog('✗ کد خطا: ' + xhr.status);
+                    addLog('✗ کد خطا: ' + xhr.status + ' | Status: ' + status);
+                    addLog('✗ Error: ' + error);
                     
                     // نمایش alert برای خطاهای مهم
-                    if (xhr.status === 500 || xhr.status === 0) {
-                        alert('خطای سرور رخ داد. لطفاً لاگ‌های سرور را بررسی کنید:\n' + errorMessage);
+                    if (xhr.status === 500 || xhr.status === 0 || status === 'timeout') {
+                        alert('خطا در نصب:\n\n' + errorMessage + '\n\nلطفاً لاگ‌های سرور را بررسی کنید:\ntail -f site/storage/logs/laravel.log');
                     }
                     
                     btn.prop('disabled', false);
