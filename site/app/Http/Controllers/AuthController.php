@@ -16,11 +16,6 @@ class AuthController extends Controller
             return redirect()->route('dashboard');
         }
 
-        // اگر admin نساخته نشده، به welcome برو
-        if (empty(env('ADMIN_USERNAME'))) {
-            return redirect()->route('setup.welcome');
-        }
-
         return view('auth.login');
     }
 

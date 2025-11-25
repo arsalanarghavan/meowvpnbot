@@ -26,10 +26,9 @@ class EnsureSetupCompleted
             return $next($request);
         }
 
-        // اگر admin نساخته نشده، به welcome برو
+        // اگر admin نساخته نشده، فقط برای dashboard redirect کن
         if (empty(env('ADMIN_USERNAME'))) {
-            // فقط اگر در root یا dashboard هستیم، redirect کن
-            if ($request->is('/') || $request->is('dashboard*')) {
+            if ($request->is('dashboard*')) {
                 return redirect()->route('setup.welcome');
             }
             return $next($request);
@@ -37,16 +36,15 @@ class EnsureSetupCompleted
 
         // اگر bot نصب نشده
         if (!env('BOT_INSTALLED', false)) {
-            // اگر لاگین نکرده، به welcome برو
+            // اگر لاگین نکرده، فقط برای dashboard redirect کن
             if (!session()->has('user_authenticated')) {
-                // فقط اگر در root یا dashboard هستیم، redirect کن
-                if ($request->is('/') || $request->is('dashboard*')) {
+                if ($request->is('dashboard*')) {
                     return redirect()->route('setup.welcome');
                 }
                 return $next($request);
             }
-            // اگر لاگین کرده، به setup برو
-            if ($request->is('/') || $request->is('dashboard*')) {
+            // اگر لاگین کرده، فقط برای dashboard redirect کن
+            if ($request->is('dashboard*')) {
                 return redirect()->route('setup');
             }
             return $next($request);

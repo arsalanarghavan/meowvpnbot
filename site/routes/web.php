@@ -52,7 +52,12 @@ Route::get('/', function () {
     
     // اگر wizard فعال است و bot نصب نشده
     if (env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false)) {
-        return redirect()->route('setup');
+        // اگر لاگین کرده، به setup برو
+        if (session()->has('user_authenticated')) {
+            return redirect()->route('setup');
+        }
+        // اگر لاگین نکرده، به welcome برو
+        return redirect()->route('setup.welcome');
     }
     
     // در غیر این صورت به login برو
