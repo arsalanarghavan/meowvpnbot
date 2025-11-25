@@ -1,10 +1,5 @@
 #!/bin/bash
-
-# ==========================================
-# Bot + Website - Automatic Updater
-# به‌روزرسانی خودکار ربات و سایت
-# ==========================================
-
+# به‌روزرسانی خودکار
 set -e
 
 # تشخیص مسیر پروژه
@@ -142,33 +137,18 @@ else
 fi
 
 # دریافت آخرین تغییرات
-echo ""
-read -p "آیا می‌خواهید از Git به‌روزرسانی شود؟ (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_step "دریافت آخرین تغییرات از Git..."
-    
-    if [ -d ".git" ]; then
-        # ذخیره تغییرات local (اگر وجود دارد)
-        if [[ -n $(git status -s) ]]; then
-            print_warning "تغییرات local یافت شد. در حال ذخیره..."
-            git stash
-            print_info "تغییرات ذخیره شدند (git stash)"
-        fi
-        
-        git pull origin main || git pull origin master
-        print_success "آخرین نسخه دریافت شد"
-        
-        # بازگردانی تغییرات local
-        if git stash list | grep -q "stash@{0}"; then
-            print_info "بازگردانی تغییرات local..."
-            git stash pop || print_warning "تعارض در merge - لطفاً دستی حل کنید"
-        fi
-    else
-        print_warning "این پوشه یک Git repository نیست - از Git استفاده نشد"
+print_step "دریافت آخرین تغییرات از Git..."
+if [ -d ".git" ]; then
+    if [[ -n $(git status -s) ]]; then
+        git stash
     fi
+    git pull origin main || git pull origin master
+    if git stash list | grep -q "stash@{0}"; then
+        git stash pop || true
+    fi
+    print_success "آخرین نسخه دریافت شد"
 else
-    print_info "به‌روزرسانی Git رد شد"
+    print_warning "Git repository یافت نشد"
 fi
 
 # فعال‌سازی virtual environment (اگر غیرفعال شده)
@@ -220,82 +200,31 @@ else
 fi
 
 # راه‌اندازی مجدد ربات
-echo ""
-read -p "آیا می‌خواهید ربات الان اجرا شود؟ (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_step "راه‌اندازی ربات..."
-    
-    if systemctl list-unit-files | grep -q "meowvpnbot.service"; then
-        sudo systemctl start meowvpnbot
-        sleep 2
-        
-        if systemctl is-active --quiet meowvpnbot.service; then
-            print_success "ربات با systemd راه‌اندازی شد"
-            print_info "برای مشاهده لاگ‌ها: sudo journalctl -u meowvpnbot -f"
-        else
-            print_error "خطا در راه‌اندازی! لاگ‌ها را بررسی کنید:"
-            print_info "sudo journalctl -u meowvpnbot -n 50"
-        fi
-    else
-        print_info "در حال اجرا در background..."
-        nohup python main.py > bot.log 2>&1 &
-        sleep 3
-        
-        if pgrep -f "python.*main.py" > /dev/null; then
-            print_success "ربات راه‌اندازی شد"
-            print_info "برای مشاهده لاگ‌ها: tail -f bot.log"
-        else
-            print_error "خطا در راه‌اندازی! لاگ‌ها را بررسی کنید:"
-            print_info "cat bot.log"
-        fi
-    fi
+print_step "راه‌اندازی ربات..."
+if systemctl list-unit-files | grep -q "meowvpn-bot.service"; then
+    sudo systemctl restart meowvpn-bot
+    sleep 2
+    systemctl is-active --quiet meowvpn-bot && print_success "ربات راه‌اندازی شد" || print_warning "ربات راه‌اندازی نشد"
 else
-    print_info "ربات راه‌اندازی نشد. برای اجرای دستی:"
-    echo "  ${CYAN}source venv/bin/activate${NC}"
-    echo "  ${CYAN}python main.py${NC}"
+    cd "$PROJECT_ROOT"
+    source venv/bin/activate 2>/dev/null || true
+    nohup python main.py > bot.log 2>&1 &
+    sleep 2
+    pgrep -f "python.*main.py" > /dev/null && print_success "ربات راه‌اندازی شد" || print_warning "ربات راه‌اندازی نشد"
 fi
 
-# نمایش آمار
-echo ""
-print_step "آمار پروژه:"
-FILE_COUNT=$(find . -name "*.py" -type f | wc -l)
-LINE_COUNT=$(find . -name "*.py" -type f -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}')
-DOC_COUNT=$(find . -name "*.md" -type f | wc -l)
-
-echo "  📁 فایل‌های Python: $FILE_COUNT"
-echo "  💻 خطوط کد: $LINE_COUNT"
-echo "  📚 فایل‌های مستندات: $DOC_COUNT"
-
-# پیام نهایی
-echo ""
-echo -e "${GREEN}╔═══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║                                                   ║${NC}"
-echo -e "${GREEN}║        ✅ به‌روزرسانی با موفقیت انجام شد! ✅      ║${NC}"
-echo -e "${GREEN}║                                                   ║${NC}"
-echo -e "${GREEN}╚═══════════════════════════════════════════════════╝${NC}"
-echo ""
-
-print_info "🎯 تغییرات جدید:"
-if [ -f "CHANGELOG.md" ]; then
-    echo "  برای مشاهده تغییرات: ${CYAN}cat CHANGELOG.md${NC}"
-fi
-
-if [ -f "NEW_FEATURE_CARD_MANAGEMENT.md" ]; then
-    echo "  قابلیت جدید: ${CYAN}cat NEW_FEATURE_CARD_MANAGEMENT.md${NC}"
+# Reset Setup Wizard اگر لازم باشه
+if [ -f "$SITE_DIR/.env" ]; then
+    SITE_ENV="$SITE_DIR/.env"
+    if grep -q "SETUP_WIZARD_ENABLED=false" "$SITE_ENV" && grep -q "BOT_INSTALLED=false" "$SITE_ENV"; then
+        print_info "Reset Setup Wizard..."
+        sed -i 's/SETUP_WIZARD_ENABLED=false/SETUP_WIZARD_ENABLED=true/g' "$SITE_ENV" || true
+        cd "$SITE_DIR"
+        php artisan config:clear 2>/dev/null || true
+        php artisan cache:clear 2>/dev/null || true
+    fi
 fi
 
 echo ""
-echo -e "${PURPLE}"
-cat << "EOF"
-     /\_/\  
-    ( ^.^ ) 
-     > ^ <   Updated & Ready!
-    /|   |\  
-   (_|   |_)
-EOF
-echo -e "${NC}"
-
-print_success "به‌روزرسانی کامل شد! 🎊"
-echo ""
+print_success "✅ به‌روزرسانی کامل شد!"
 

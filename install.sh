@@ -95,12 +95,30 @@ if [ -f "$PROJECT_ROOT/site/.env" ] && [ -f "$PROJECT_ROOT/.env" ]; then
             ALREADY_INSTALLED=true
             ;;
         2)
-            print_warning "تنظیمات قبلی پاک خواهند شد!"
+            print_warning "همه چیز پاک می‌شود و از اول نصب می‌شود!"
             read -p "آیا مطمئن هستید؟ (yes/no): " CONFIRM
             if [ "$CONFIRM" != "yes" ]; then
                 print_info "لغو شد."
                 exit 0
             fi
+            print_info "در حال پاک کردن..."
+            # بکاپ
+            BACKUP_DIR="$HOME/meowvpn_backup_$(date +%Y%m%d_%H%M%S)"
+            mkdir -p "$BACKUP_DIR"
+            [ -f "$PROJECT_ROOT/vpn_bot.db" ] && cp "$PROJECT_ROOT/vpn_bot.db" "$BACKUP_DIR/" 2>/dev/null || true
+            [ -f "$PROJECT_ROOT/.env" ] && cp "$PROJECT_ROOT/.env" "$BACKUP_DIR/bot.env" 2>/dev/null || true
+            [ -f "$PROJECT_ROOT/site/.env" ] && cp "$PROJECT_ROOT/site/.env" "$BACKUP_DIR/site.env" 2>/dev/null || true
+            print_success "بکاپ: $BACKUP_DIR"
+            # متوقف کردن سرویس
+            systemctl stop meowvpn-bot 2>/dev/null || true
+            systemctl disable meowvpn-bot 2>/dev/null || true
+            rm -f /etc/systemd/system/meowvpn-bot.service 2>/dev/null || true
+            systemctl daemon-reload 2>/dev/null || true
+            # حذف nginx configs
+            rm -f /etc/nginx/sites-enabled/*meow* /etc/nginx/sites-enabled/*dashboard* 2>/dev/null || true
+            rm -f /etc/nginx/sites-available/*meow* /etc/nginx/sites-available/*dashboard* 2>/dev/null || true
+            # حذف فایل‌های پروژه (فقط .env و db)
+            rm -f "$PROJECT_ROOT/.env" "$PROJECT_ROOT/site/.env" "$PROJECT_ROOT/vpn_bot.db" 2>/dev/null || true
             ALREADY_INSTALLED=false
             ;;
         3)
