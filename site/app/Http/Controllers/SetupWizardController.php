@@ -11,7 +11,35 @@ class SetupWizardController extends Controller
 
     public function __construct()
     {
-        $this->projectRoot = base_path('..');
+        // تشخیص مسیر پروژه - اگر در site هستیم، یک سطح بالا برو
+        $basePath = base_path();
+        if (strpos($basePath, '/site') !== false) {
+            $this->projectRoot = dirname($basePath);
+        } else {
+            $this->projectRoot = base_path('..');
+        }
+        
+        // اگر مسیر درست نیست، سعی کن از مسیر فعلی استفاده کنی
+        if (!is_dir($this->projectRoot) || !file_exists($this->projectRoot . '/main.py')) {
+            // سعی کن مسیرهای رایج را چک کنی
+            $possiblePaths = [
+                '/var/www/meowvpnbot',
+                dirname($basePath),
+                base_path('..'),
+            ];
+            
+            foreach ($possiblePaths as $path) {
+                if (is_dir($path) && file_exists($path . '/main.py')) {
+                    $this->projectRoot = $path;
+                    break;
+                }
+            }
+        }
+        
+        // اگر هنوز پیدا نشد، خطا بده
+        if (!is_dir($this->projectRoot)) {
+            \Log::warning("SetupWizard: مسیر پروژه یافت نشد. base_path: {$basePath}, projectRoot: {$this->projectRoot}");
+        }
     }
 
     /**
@@ -329,7 +357,12 @@ class SetupWizardController extends Controller
             $step3 = session('setup_step3');
 
             if (!$step1 || !$step2 || !$step3) {
-                return response()->json(['success' => false, 'message' => 'اطلاعات ناقص است!']);
+                return response()->json(['success' => false, 'message' => 'اطلاعات ناقص است! لطفاً مراحل قبلی را تکمیل کنید.']);
+            }
+
+            // بررسی مسیر پروژه
+            if (!is_dir($this->projectRoot)) {
+                throw new \Exception("مسیر پروژه یافت نشد: {$this->projectRoot}. لطفاً مسیر نصب را بررسی کنید.");
             }
 
             // 1. ایجاد فایل .env ربات
@@ -366,10 +399,22 @@ class SetupWizardController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            // لاگ کردن خطا برای دیباگ
+            \Log::error('Setup Wizard Install Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'خطا در نصب: ' . $e->getMessage()
-            ]);
+                'message' => 'خطا در نصب: ' . $e->getMessage(),
+                'error_details' => config('app.debug') ? [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ] : null
+            ], 500);
         }
     }
 
@@ -378,25 +423,69 @@ class SetupWizardController extends Controller
      */
     private function createBotEnv($step1, $step2, $step3)
     {
+        // بررسی وجود مسیر پروژه
+        if (!is_dir($this->projectRoot)) {
+            throw new \Exception("مسیر پروژه یافت نشد: {$this->projectRoot}");
+        }
+
+        // Escape کردن مقادیر برای .env
+        $botToken = addslashes($step1['bot_token']);
+        $botUsername = addslashes($step1['bot_username']);
+        $adminId = (int)$step1['admin_telegram_id'];
+        $zarinpalMerchant = addslashes($step3['zarinpal_merchant'] ?? '');
+        $supportUsername = addslashes($step3['support_username'] ?? '');
+        $channelId = addslashes($step3['channel_id'] ?? '');
+
         $envContent = "# Telegram Bot Configuration\n";
-        $envContent .= "TELEGRAM_BOT_TOKEN={$step1['bot_token']}\n";
-        $envContent .= "TELEGRAM_BOT_USERNAME={$step1['bot_username']}\n";
-        $envContent .= "ADMIN_ID={$step1['admin_telegram_id']}\n\n";
+        $envContent .= "TELEGRAM_BOT_TOKEN={$botToken}\n";
+        $envContent .= "TELEGRAM_BOT_USERNAME={$botUsername}\n";
+        $envContent .= "ADMIN_ID={$adminId}\n";
+        $envContent .= "ADMIN_IDS={$adminId}\n\n";
 
         $envContent .= "# Database\n";
-        $envContent .= "DATABASE_URL=sqlite:///" . $this->projectRoot . "/vpn_bot.db\n\n";
+        $dbPath = str_replace('\\', '/', $this->projectRoot . '/vpn_bot.db');
+        $envContent .= "DATABASE_URL=sqlite:///{$dbPath}\n\n";
 
         $envContent .= "# Payment Gateway\n";
-        $envContent .= "ZARINPAL_MERCHANT_ID={$step3['zarinpal_merchant']}\n\n";
+        if (!empty($zarinpalMerchant)) {
+            $envContent .= "ZARINPAL_MERCHANT_ID={$zarinpalMerchant}\n\n";
+        } else {
+            $envContent .= "ZARINPAL_MERCHANT_ID=\n\n";
+        }
 
         $envContent .= "# Support & Channel\n";
-        $envContent .= "SUPPORT_USERNAME={$step3['support_username']}\n";
-        $envContent .= "CHANNEL_LOCK_ID={$step3['channel_id']}\n";
+        if (!empty($supportUsername)) {
+            $envContent .= "SUPPORT_USERNAME={$supportUsername}\n";
+        } else {
+            $envContent .= "SUPPORT_USERNAME=\n";
+        }
+        if (!empty($channelId)) {
+            $envContent .= "CHANNEL_LOCK_ID={$channelId}\n";
+        } else {
+            $envContent .= "CHANNEL_LOCK_ID=\n";
+        }
 
         $envFilePath = $this->projectRoot . '/.env';
-        $result = file_put_contents($envFilePath, $envContent);
+        
+        // بررسی مجوز نوشتن
+        if (!is_writable(dirname($envFilePath)) && !is_writable($this->projectRoot)) {
+            throw new \Exception('مسیر پروژه قابل نوشتن نیست! لطفاً مجوزها را بررسی کنید: ' . $this->projectRoot);
+        }
+
+        $result = @file_put_contents($envFilePath, $envContent);
         if ($result === false) {
-            throw new \Exception('خطا در نوشتن فایل .env ربات! لطفاً مجوزها را بررسی کنید.');
+            // اگر نوشتن با خطا مواجه شد، با sudo امتحان کن
+            $tempFile = sys_get_temp_dir() . '/bot_env_' . uniqid();
+            if (file_put_contents($tempFile, $envContent) !== false) {
+                $tempFileEscaped = escapeshellarg($tempFile);
+                $envPathEscaped = escapeshellarg($envFilePath);
+                exec("sudo mv {$tempFileEscaped} {$envPathEscaped} 2>&1", $output, $returnCode);
+                if ($returnCode !== 0) {
+                    throw new \Exception('خطا در نوشتن فایل .env ربات! لطفاً مجوزها را بررسی کنید. خطا: ' . implode(' ', $output));
+                }
+            } else {
+                throw new \Exception('خطا در نوشتن فایل .env ربات! لطفاً مجوزها را بررسی کنید.');
+            }
         }
     }
 
