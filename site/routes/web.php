@@ -40,6 +40,11 @@ Route::prefix('backup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupComp
 
 // Root redirect
 Route::get('/', function () {
+    // اگر لاگین کرده، به dashboard برو
+    if (session()->has('user_authenticated')) {
+        return redirect()->route('dashboard');
+    }
+    
     // اگر admin نساخته نشده، به welcome برو
     if (empty(env('ADMIN_USERNAME'))) {
         return redirect()->route('setup.welcome');
@@ -47,17 +52,7 @@ Route::get('/', function () {
     
     // اگر wizard فعال است و bot نصب نشده
     if (env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false)) {
-        // اگر لاگین کرده، به setup برو
-        if (session()->has('user_authenticated')) {
-            return redirect()->route('setup');
-        }
-        // اگر لاگین نکرده، به welcome برو
-        return redirect()->route('setup.welcome');
-    }
-    
-    // اگر لاگین کرده، به dashboard برو
-    if (session()->has('user_authenticated')) {
-        return redirect()->route('dashboard');
+        return redirect()->route('setup');
     }
     
     // در غیر این صورت به login برو
@@ -159,13 +154,13 @@ Route::prefix('settings')->group(function () {
 
 // استارتر کیت (نمونه‌های قالب)
 Route::prefix('starterkit')->group(function () {
-    Route::view('layout-light', 'starterkit.layout-light')->name('layout-light');
-    Route::view('layout-dark', 'starterkit.layout-dark')->name('layout-dark');
-    Route::view('sidebar-fixed', 'starterkit.sidebar-fixed')->name('sidebar-fixed');
-    Route::view('boxed', 'starterkit.boxed')->name('boxed');
-    Route::view('layout-rtl', 'starterkit.layout-rtl')->name('layout-rtl');
-    Route::view('vertical', 'starterkit.vertical')->name('vertical');
-    Route::view('mega-menu', 'starterkit.mega-menu')->name('mega-menu');
+Route::view('layout-light', 'starterkit.layout-light')->name('layout-light');
+Route::view('layout-dark', 'starterkit.layout-dark')->name('layout-dark');
+Route::view('sidebar-fixed', 'starterkit.sidebar-fixed')->name('sidebar-fixed');
+Route::view('boxed', 'starterkit.boxed')->name('boxed');
+Route::view('layout-rtl', 'starterkit.layout-rtl')->name('layout-rtl');
+Route::view('vertical', 'starterkit.vertical')->name('vertical');
+Route::view('mega-menu', 'starterkit.mega-menu')->name('mega-menu');
 });
 
 // پاک‌سازی کش (فقط برای ادمین)

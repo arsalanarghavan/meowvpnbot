@@ -42,7 +42,7 @@ class SetupWizardController extends Controller
      */
     public function index()
     {
-        // اگر admin نساخته شده، به welcome برو
+        // اگر admin نساخته نشده، به welcome برو
         if (empty(env('ADMIN_USERNAME'))) {
             return redirect()->route('setup.welcome');
         }
@@ -51,7 +51,7 @@ class SetupWizardController extends Controller
         if (!env('SETUP_WIZARD_ENABLED', false) || env('BOT_INSTALLED', false)) {
             // اگر لاگین کرده، به dashboard برو
             if (session()->has('user_authenticated')) {
-                return redirect()->route('dashboard')->with('info', 'Setup Wizard تکمیل شده است.');
+                return redirect()->route('dashboard');
             }
             // اگر لاگین نکرده، به login برو
             return redirect()->route('login');
@@ -65,18 +65,12 @@ class SetupWizardController extends Controller
      */
     public function welcome()
     {
-        // اگر قبلاً یوزر تنظیم شده، به setup برو (فقط یک بار)
-        $adminUsername = env('ADMIN_USERNAME');
-        if (!empty($adminUsername)) {
-            // اگر لاگین کرده، به dashboard برو
-            if (session()->has('user_authenticated')) {
-                return redirect()->route('dashboard');
-            }
-            // اگر لاگین نکرده، به setup برو
+        // اگر قبلاً یوزر تنظیم شده، به setup برو
+        if (!empty(env('ADMIN_USERNAME'))) {
             return redirect()->route('setup');
         }
 
-        // اگر یوزر نساخته شده، صفحه welcome رو نشون بده
+        // صفحه welcome رو نشون بده
         return view('setup.welcome');
     }
 
