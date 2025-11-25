@@ -19,6 +19,11 @@ class SetupWizardController extends Controller
      */
     private function checkWizardAccess()
     {
+        // اگر admin نساخته شده، همیشه دسترسی بده
+        if (empty(env('ADMIN_USERNAME'))) {
+            return true;
+        }
+
         // بررسی فعال بودن wizard
         if (!env('SETUP_WIZARD_ENABLED', false)) {
             return false;
@@ -37,13 +42,19 @@ class SetupWizardController extends Controller
      */
     public function index()
     {
-        if (!$this->checkWizardAccess()) {
-            return redirect()->route('dashboard')->with('info', 'Setup Wizard غیرفعال است یا ربات قبلاً نصب شده است.');
+        // اگر admin نساخته شده، به welcome برو
+        if (empty(env('ADMIN_USERNAME'))) {
+            return redirect()->route('setup.welcome');
         }
 
-        // اگر اولین بار است و هنوز یوزر/پسورد تنظیم نشده
-        if (env('FIRST_RUN', false) && empty(env('ADMIN_USERNAME'))) {
-            return redirect()->route('setup.welcome');
+        // اگر wizard غیرفعال است یا ربات نصب شده
+        if (!env('SETUP_WIZARD_ENABLED', false) || env('BOT_INSTALLED', false)) {
+            // اگر لاگین کرده، به dashboard برو
+            if (session()->has('user_authenticated')) {
+                return redirect()->route('dashboard')->with('info', 'Setup Wizard تکمیل شده است.');
+            }
+            // اگر لاگین نکرده، به login برو
+            return redirect()->route('login');
         }
 
         return view('setup.index');

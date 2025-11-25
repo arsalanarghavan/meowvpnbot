@@ -503,15 +503,25 @@ ENVFILE
     if ! command -v nginx &> /dev/null; then
         print_info "نصب Nginx و ابزارهای مورد نیاز..."
         sudo apt update
-        sudo apt install -y nginx certbot python3-certbot-nginx lsof net-tools
+        sudo apt install -y nginx certbot python3-certbot-nginx lsof net-tools dnsutils
         print_success "Nginx نصب شد"
     else
         print_success "Nginx از قبل نصب شده است"
         
-        # نصب lsof اگر نبود
+        # نصب ابزارهای مورد نیاز اگر نبودند
+        MISSING_PACKAGES=""
         if ! command -v lsof &> /dev/null; then
-            print_info "نصب lsof..."
-            sudo apt install -y lsof net-tools
+            MISSING_PACKAGES="$MISSING_PACKAGES lsof"
+        fi
+        if ! command -v dig &> /dev/null; then
+            MISSING_PACKAGES="$MISSING_PACKAGES dnsutils"
+        fi
+        if ! command -v ss &> /dev/null; then
+            MISSING_PACKAGES="$MISSING_PACKAGES net-tools"
+        fi
+        if [ -n "$MISSING_PACKAGES" ]; then
+            print_info "نصب ابزارهای مورد نیاز:$MISSING_PACKAGES"
+            sudo apt install -y $MISSING_PACKAGES
         fi
     fi
     
@@ -638,19 +648,82 @@ NGINXCONF
     print_step "نصب SSL Certificate..."
     print_warning "توجه: DNS باید به IP سرور شما اشاره کند!"
     echo ""
-    read -p "آیا DNS تنظیم شده است؟ (y/n) " -n 1 -r
+    
+    # بررسی DNS
+    SERVER_IP=$(get_server_ip)
+    print_info "IP سرور: $SERVER_IP"
+    
+    if command -v dig &> /dev/null; then
+        DOMAIN_IP=$(dig +short $PANEL_DOMAIN @8.8.8.8 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+        
+        if [ -z "$DOMAIN_IP" ]; then
+            print_warning "DNS برای $PANEL_DOMAIN یافت نشد یا هنوز propagate نشده!"
+            print_info "لطفاً DNS را به IP سرور ($SERVER_IP) تنظیم کنید"
+            print_info "بعد از تنظیم DNS، 5-10 دقیقه صبر کنید تا propagate شود"
+        elif [ "$DOMAIN_IP" != "$SERVER_IP" ]; then
+            print_warning "DNS به IP دیگری اشاره می‌کند!"
+            print_info "DNS: $DOMAIN_IP | سرور: $SERVER_IP"
+            print_info "لطفاً DNS را به IP سرور ($SERVER_IP) تغییر دهید"
+        else
+            print_success "DNS صحیح است: $DOMAIN_IP"
+        fi
+    else
+        print_warning "ابزار dig یافت نشد - بررسی DNS انجام نشد"
+        print_info "لطفاً مطمئن شوید DNS به IP سرور ($SERVER_IP) اشاره می‌کند"
+    fi
+    
+    echo ""
+    read -p "آیا می‌خواهید SSL نصب شود؟ (y/n) " -n 1 -r
     echo
     
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "دریافت SSL Certificate..."
-        sudo certbot --nginx -d $PANEL_DOMAIN --non-interactive --agree-tos --email admin@$MAIN_DOMAIN --redirect
         
-        if [ $? -eq 0 ]; then
-            print_success "SSL Certificate نصب شد"
-            PANEL_URL="https://$PANEL_DOMAIN"
+        # بررسی وجود certificate قبلی
+        if sudo certbot certificates 2>/dev/null | grep -q "$PANEL_DOMAIN"; then
+            print_info "Certificate قبلی یافت شد، تمدید..."
+            sudo certbot renew --quiet
         else
-            print_warning "SSL نصب نشد - از HTTP استفاده می‌شود"
-            PANEL_URL="http://$PANEL_DOMAIN"
+            # تلاش برای نصب SSL
+            print_info "تلاش برای نصب SSL با روش nginx..."
+            sudo certbot --nginx -d $PANEL_DOMAIN --non-interactive --agree-tos --email admin@$MAIN_DOMAIN --redirect 2>&1 | tee /tmp/certbot.log
+            
+            CERTBOT_EXIT=$?
+            
+            if [ $CERTBOT_EXIT -eq 0 ]; then
+                print_success "SSL Certificate نصب شد"
+                PANEL_URL="https://$PANEL_DOMAIN"
+            else
+                print_error "خطا در نصب SSL"
+                echo ""
+                print_info "جزئیات خطا:"
+                cat /tmp/certbot.log | tail -10
+                echo ""
+                
+                # بررسی علت خطا
+                if grep -q "No such authorization" /tmp/certbot.log; then
+                    print_warning "خطای 'No such authorization' - معمولاً به دلیل:"
+                    echo "  1. DNS به IP سرور اشاره نمی‌کند"
+                    echo "  2. Domain قبلاً در سرور دیگری استفاده شده"
+                    echo "  3. Rate limit Let's Encrypt (بیش از 5 درخواست در هفته)"
+                    echo ""
+                    print_info "راه حل:"
+                    echo "  - DNS را بررسی کنید: dig $PANEL_DOMAIN"
+                    echo "  - یا بعداً با دستور زیر نصب کنید:"
+                    echo "    sudo certbot --nginx -d $PANEL_DOMAIN"
+                fi
+                
+                echo ""
+                read -p "آیا می‌خواهید بدون SSL ادامه دهید؟ (y/n) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    print_warning "ادامه بدون SSL - بعداً می‌توانید نصب کنید"
+                    PANEL_URL="http://$PANEL_DOMAIN"
+                else
+                    print_error "نصب SSL ضروری است. لطفاً DNS را بررسی کنید و دوباره تلاش کنید."
+                    exit 1
+                fi
+            fi
         fi
     else
         print_warning "SSL رد شد - بعداً با certbot نصب کنید"

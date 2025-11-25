@@ -16,13 +16,18 @@ class EnsureSetupCompleted
      */
     public function handle(Request $request, Closure $next)
     {
-        // اگر Setup Wizard فعال نیست، ادامه بده
-        if (!env('SETUP_WIZARD_ENABLED', false)) {
+        // اگر در مسیر setup یا backup هستیم، همیشه ادامه بده (بدون چک)
+        if ($request->is('setup*') || $request->is('backup*')) {
             return $next($request);
         }
 
-        // اگر در مسیر setup هستیم، ادامه بده
-        if ($request->is('setup*') || $request->is('backup*')) {
+        // اگر در مسیر login هستیم، ادامه بده
+        if ($request->is('login*')) {
+            return $next($request);
+        }
+
+        // اگر Setup Wizard فعال نیست، ادامه بده
+        if (!env('SETUP_WIZARD_ENABLED', false)) {
             return $next($request);
         }
 
@@ -31,11 +36,11 @@ class EnsureSetupCompleted
             return redirect()->route('setup.welcome');
         }
 
-        // اگر bot نصب نشده، به setup برو
+        // اگر bot نصب نشده
         if (!env('BOT_INSTALLED', false)) {
-            // اگر لاگین نکرده، به login برو
-            if (!session()->has('user_authenticated') && !$request->is('login')) {
-                return redirect()->route('login');
+            // اگر لاگین نکرده، به welcome برو (نه login)
+            if (!session()->has('user_authenticated')) {
+                return redirect()->route('setup.welcome');
             }
 
             // اگر لاگین کرده، به setup برو

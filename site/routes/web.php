@@ -40,9 +40,27 @@ Route::prefix('backup')->group(function () {
 
 // Root redirect
 Route::get('/', function () {
+    // اگر admin نساخته شده، به welcome برو
+    if (empty(env('ADMIN_USERNAME'))) {
+        return redirect()->route('setup.welcome');
+    }
+    
+    // اگر wizard فعال است و bot نصب نشده
+    if (env('SETUP_WIZARD_ENABLED', false) && !env('BOT_INSTALLED', false)) {
+        // اگر لاگین کرده، به setup برو
+        if (session()->has('user_authenticated')) {
+            return redirect()->route('setup');
+        }
+        // اگر لاگین نکرده، به welcome برو
+        return redirect()->route('setup.welcome');
+    }
+    
+    // اگر لاگین کرده، به dashboard برو
     if (session()->has('user_authenticated')) {
         return redirect()->route('dashboard');
     }
+    
+    // در غیر این صورت به login برو
     return redirect()->route('login');
 });
 
