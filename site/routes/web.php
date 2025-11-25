@@ -40,7 +40,7 @@ Route::prefix('backup')->group(function () {
 
 // Root redirect
 Route::get('/', function () {
-    // اگر admin نساخته شده، به welcome برو
+    // اگر admin نساخته نشده، به welcome برو
     if (empty(env('ADMIN_USERNAME'))) {
         return redirect()->route('setup.welcome');
     }

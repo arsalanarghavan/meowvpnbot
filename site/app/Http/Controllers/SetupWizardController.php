@@ -65,11 +65,7 @@ class SetupWizardController extends Controller
      */
     public function welcome()
     {
-        if (!$this->checkWizardAccess()) {
-            return redirect()->route('dashboard');
-        }
-
-        // اگر قبلاً یوزر تنظیم شده، به صفحه اصلی برو
+        // اگر قبلاً یوزر تنظیم شده، به setup برو
         if (!empty(env('ADMIN_USERNAME'))) {
             return redirect()->route('setup');
         }

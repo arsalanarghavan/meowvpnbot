@@ -16,13 +16,8 @@ class EnsureSetupCompleted
      */
     public function handle(Request $request, Closure $next)
     {
-        // اگر در مسیر setup یا backup هستیم، همیشه ادامه بده (بدون چک)
-        if ($request->is('setup*') || $request->is('backup*')) {
-            return $next($request);
-        }
-
-        // اگر در مسیر login هستیم، ادامه بده
-        if ($request->is('login*')) {
+        // اگر در مسیر setup، backup یا login هستیم، همیشه ادامه بده (بدون هیچ redirect)
+        if ($request->is('setup*') || $request->is('backup*') || $request->is('login*')) {
             return $next($request);
         }
 
@@ -31,22 +26,19 @@ class EnsureSetupCompleted
             return $next($request);
         }
 
-        // اگر admin نساخته شده، به welcome برو
+        // اگر admin نساخته نشده، به welcome برو
         if (empty(env('ADMIN_USERNAME'))) {
             return redirect()->route('setup.welcome');
         }
 
         // اگر bot نصب نشده
         if (!env('BOT_INSTALLED', false)) {
-            // اگر لاگین نکرده، به welcome برو (نه login)
+            // اگر لاگین نکرده، به welcome برو
             if (!session()->has('user_authenticated')) {
                 return redirect()->route('setup.welcome');
             }
-
             // اگر لاگین کرده، به setup برو
-            if (session()->has('user_authenticated')) {
-                return redirect()->route('setup');
-            }
+            return redirect()->route('setup');
         }
 
         return $next($request);
