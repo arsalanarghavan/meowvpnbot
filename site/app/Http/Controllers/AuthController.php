@@ -11,13 +11,14 @@ class AuthController extends Controller
      */
     public function showLogin()
     {
-        // اگر Setup Wizard فعال است و admin نساخته شده، redirect به setup
-        if (env('SETUP_WIZARD_ENABLED', false) && empty(env('ADMIN_USERNAME'))) {
-            return redirect()->route('setup.welcome');
-        }
-
+        // اگر لاگین کرده، به dashboard برو
         if (session()->has('user_authenticated')) {
             return redirect()->route('dashboard');
+        }
+
+        // اگر admin نساخته نشده، به welcome برو
+        if (empty(env('ADMIN_USERNAME'))) {
+            return redirect()->route('setup.welcome');
         }
 
         return view('auth.login');

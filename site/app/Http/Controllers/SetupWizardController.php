@@ -65,11 +65,18 @@ class SetupWizardController extends Controller
      */
     public function welcome()
     {
-        // اگر قبلاً یوزر تنظیم شده، به setup برو
-        if (!empty(env('ADMIN_USERNAME'))) {
+        // اگر قبلاً یوزر تنظیم شده، به setup برو (فقط یک بار)
+        $adminUsername = env('ADMIN_USERNAME');
+        if (!empty($adminUsername)) {
+            // اگر لاگین کرده، به dashboard برو
+            if (session()->has('user_authenticated')) {
+                return redirect()->route('dashboard');
+            }
+            // اگر لاگین نکرده، به setup برو
             return redirect()->route('setup');
         }
 
+        // اگر یوزر نساخته شده، صفحه welcome رو نشون بده
         return view('setup.welcome');
     }
 

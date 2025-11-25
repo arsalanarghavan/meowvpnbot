@@ -15,8 +15,8 @@ use App\Http\Controllers\GiftCardController;
 use App\Http\Controllers\CardAccountController;
 use App\Http\Controllers\SettingController;
 
-// Setup Wizard (بدون middleware - فقط اگر فعال باشد)
-Route::prefix('setup')->group(function () {
+// Setup Wizard (بدون middleware)
+Route::prefix('setup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
     Route::get('/', [SetupWizardController::class, 'index'])->name('setup');
     Route::get('/welcome', [SetupWizardController::class, 'welcome'])->name('setup.welcome');
     Route::post('/welcome', [SetupWizardController::class, 'saveWelcome'])->name('setup.welcome.save');
@@ -31,8 +31,8 @@ Route::prefix('setup')->group(function () {
     Route::post('/install', [SetupWizardController::class, 'install'])->name('setup.install');
 });
 
-// Backup Import Routes
-Route::prefix('backup')->group(function () {
+// Backup Import Routes (بدون middleware)
+Route::prefix('backup')->withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
     Route::post('/analyze', [BackupImportController::class, 'analyze'])->name('backup.analyze');
     Route::post('/import', [BackupImportController::class, 'import'])->name('backup.import');
     Route::get('/sample', [BackupImportController::class, 'downloadSample'])->name('backup.sample');
@@ -65,9 +65,11 @@ Route::get('/', function () {
 });
 
 // صفحات احراز هویت (بدون middleware)
-Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('login.post');
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::withoutMiddleware([\App\Http\Middleware\EnsureSetupCompleted::class])->group(function () {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+});
 
 // تمام صفحات محافظت شده با middleware
 Route::middleware(['web', App\Http\Middleware\Authenticate::class, App\Http\Middleware\RedirectIfSetupNeeded::class])->group(function () {
