@@ -24,7 +24,8 @@ class BackupImportController extends Controller
             return redirect()->route('dashboard')->with('error', 'بخش Import غیرفعال است.');
         }
 
-        return view('backup.import');
+        // استفاده از view موجود setup.step0
+        return view('setup.step0');
     }
 
     /**
