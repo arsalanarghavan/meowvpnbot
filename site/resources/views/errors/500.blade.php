@@ -11,7 +11,7 @@
 <!-- error-500 start-->
 <div class="error-wrapper">
    <div class="container">
-      <img class="img-100" src="{{route('/')}}/assets/images/other-images/sad.png" alt="">
+      <img class="img-100" src="{{route('home')}}/assets/images/other-images/sad.png" alt="">
       <div class="error-heading">
          <h2 class="headline font-primary">500</h2>
       </div>

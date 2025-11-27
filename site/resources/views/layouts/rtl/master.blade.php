@@ -11,7 +11,7 @@
       <link rel="shortcut icon" href="{{asset('assets/images/favicon.png')}}" type="image/x-icon">
       <title>Poco - @yield('title')</title>
       @include('layouts.rtl.css')
-      @yield('style')      
+      @yield('style')
    </head>
    <body main-theme-layout="rtl">
       <!-- Loader starts-->
@@ -39,13 +39,13 @@
                   <div class="page-header">
                      <div class="row">
                         <div class="col-lg-6 main-header">
-                           @yield('breadcrumb-title')                           
+                           @yield('breadcrumb-title')
                            <h6 class="mb-0">admin panel</h6>
                         </div>
                         <div class="col-lg-6 breadcrumb-right">
                            <ol class="breadcrumb">
-                              <li class="breadcrumb-item"><a href="{{ route('/') }}"><i class="pe-7s-home"></i></a></li>
-                              @yield('breadcrumb-items')                              
+                              <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="pe-7s-home"></i></a></li>
+                              @yield('breadcrumb-items')
                            </ol>
                         </div>
                      </div>
@@ -56,9 +56,9 @@
                <!-- Container-fluid Ends-->
             </div>
             <!-- footer start-->
-            @include('layouts.rtl.footer')            
+            @include('layouts.rtl.footer')
          </div>
       </div>
-      @include('layouts.rtl.script')       
+      @include('layouts.rtl.script')
    </body>
 </html>

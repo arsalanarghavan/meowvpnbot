@@ -44,7 +44,7 @@
                         </div>
                         <div class="col-lg-6 breadcrumb-right">
                            <ol class="breadcrumb">
-                              <li class="breadcrumb-item"><a href="{{ route('/') }}"><i class="pe-7s-home"></i></a></li>
+                              <li class="breadcrumb-item"><a href="{{ route('home') }}"><i class="pe-7s-home"></i></a></li>
                               @yield('breadcrumb-items')
                            </ol>
                         </div>
@@ -59,6 +59,6 @@
             @include('layouts.megamenu.footer')
          </div>
       </div>
-      @include('layouts.megamenu.script') 
+      @include('layouts.megamenu.script')
    </body>
 </html>

@@ -67,7 +67,7 @@ Route::get('/', function () {
     
     // در غیر این صورت به login برو
     return redirect()->route('login');
-});
+})->name('home');
 
 // صفحات احراز هویت
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');

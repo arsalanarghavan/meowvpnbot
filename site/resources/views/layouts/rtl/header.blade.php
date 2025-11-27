@@ -1,7 +1,7 @@
 <div class="page-main-header">
    <div class="main-header-right">
       <div class="main-header-left text-center">
-         <div class="logo-wrapper"><a href="{{route('/')}}"><img src="{{asset('assets/images/logo/logo.png')}}" alt=""></a></div>
+         <div class="logo-wrapper"><a href="{{route('home')}}"><img src="{{asset('assets/images/logo/logo.png')}}" alt=""></a></div>
       </div>
       <div class="mobile-sidebar">
          <div class="media-body text-right switch-sm">
