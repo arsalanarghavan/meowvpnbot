@@ -18,7 +18,7 @@ class SetupWizardController extends Controller
         } else {
         $this->projectRoot = base_path('..');
         }
-        
+
         // اگر مسیر درست نیست، سعی کن از مسیر فعلی استفاده کنی
         if (!is_dir($this->projectRoot) || !file_exists($this->projectRoot . '/main.py')) {
             // سعی کن مسیرهای رایج را چک کنی
@@ -29,7 +29,7 @@ class SetupWizardController extends Controller
                 base_path('..'),
                 realpath(base_path('..')),
             ];
-            
+
             foreach ($possiblePaths as $path) {
                 if ($path && is_dir($path) && file_exists($path . '/main.py')) {
                     $this->projectRoot = $path;
@@ -38,7 +38,7 @@ class SetupWizardController extends Controller
                 }
             }
         }
-        
+
         // اگر هنوز پیدا نشد، خطا بده
         if (!is_dir($this->projectRoot)) {
             \Log::warning("SetupWizard: مسیر پروژه یافت نشد. base_path: {$basePath}, projectRoot: {$this->projectRoot}");
@@ -119,12 +119,12 @@ class SetupWizardController extends Controller
 
         // ذخیره در .env
         $envPath = base_path('.env');
-        
+
         // بررسی وجود فایل
         if (!file_exists($envPath)) {
             return back()->withErrors(['username' => 'فایل .env یافت نشد!'])->withInput();
         }
-        
+
         // خواندن محتوا
         $envContent = file_get_contents($envPath);
         if ($envContent === false) {
@@ -133,13 +133,13 @@ class SetupWizardController extends Controller
 
         // Hash کردن password قبل از ذخیره
         $hashedPassword = password_hash($request->password, PASSWORD_DEFAULT);
-        
+
         $usernameEscaped = addslashes($request->username);
         $passwordEscaped = addslashes($hashedPassword);
-        
+
         $envContent = preg_replace('/ADMIN_USERNAME=.*/', 'ADMIN_USERNAME=' . $usernameEscaped, $envContent);
         $envContent = preg_replace('/ADMIN_PASSWORD=.*/', 'ADMIN_PASSWORD=' . $passwordEscaped, $envContent);
-        
+
         // اگر متغیر وجود نداشت، اضافه کن
         if (strpos($envContent, 'ADMIN_USERNAME=') === false) {
             $envContent .= "\nADMIN_USERNAME={$usernameEscaped}\n";
@@ -147,7 +147,7 @@ class SetupWizardController extends Controller
         if (strpos($envContent, 'ADMIN_PASSWORD=') === false) {
             $envContent .= "\nADMIN_PASSWORD={$passwordEscaped}\n";
         }
-        
+
         $envContent = preg_replace('/FIRST_RUN=true/', 'FIRST_RUN=false', $envContent);
 
         // نوشتن با بررسی مجوز
@@ -382,6 +382,11 @@ class SetupWizardController extends Controller
                 throw new \Exception($errorMsg);
             }
 
+            \Log::info('Setup Wizard: Creating storage directories');
+            // 0. ایجاد پوشه‌های storage (اگر وجود ندارند)
+            $this->createStorageDirectories();
+            \Log::info('Setup Wizard: Storage directories created');
+
             \Log::info('Setup Wizard: Creating bot .env file');
             // 1. ایجاد فایل .env ربات
             $this->createBotEnv($step1, $step2, $step3);
@@ -450,22 +455,22 @@ class SetupWizardController extends Controller
                 'project_root' => $this->projectRoot ?? 'not set',
                 'trace' => $e->getTraceAsString()
             ];
-            
+
             \Log::error('Setup Wizard Install Error', $errorDetails);
-            
+
             // ساخت پیام خطای کاربرپسند
             $userMessage = 'خطا در نصب: ' . $e->getMessage();
-            
+
             // اگر خطا مربوط به مجوزها باشد، راهنمایی بده
             if (strpos($e->getMessage(), 'مجوز') !== false || strpos($e->getMessage(), 'permission') !== false) {
                 $userMessage .= "\n\nراه حل: لطفاً مجوزهای مسیر پروژه را بررسی کنید:\nsudo chown -R www-data:www-data " . ($this->projectRoot ?? '/var/www/meowvpnbot');
             }
-            
+
             // اگر خطا مربوط به مسیر باشد، راهنمایی بده
             if (strpos($e->getMessage(), 'مسیر') !== false || strpos($e->getMessage(), 'path') !== false) {
                 $userMessage .= "\n\nراه حل: لطفاً مسیر نصب را بررسی کنید. مسیر فعلی: " . ($this->projectRoot ?? 'تعیین نشده');
             }
-            
+
             return response()->json([
                 'success' => false,
                 'message' => $userMessage,
@@ -477,6 +482,90 @@ class SetupWizardController extends Controller
                 ] : null
             ], 500);
         }
+    }
+
+    /**
+     * ایجاد پوشه‌های storage برای Laravel
+     */
+    private function createStorageDirectories()
+    {
+        $siteDir = base_path();
+        $storageDir = $siteDir . '/storage';
+        $logsDir = $storageDir . '/logs';
+        $frameworkDir = $storageDir . '/framework';
+        $sessionsDir = $frameworkDir . '/sessions';
+        $viewsDir = $frameworkDir . '/views';
+        $cacheDir = $frameworkDir . '/cache';
+        $bootstrapCacheDir = $siteDir . '/bootstrap/cache';
+
+        // ایجاد پوشه‌ها
+        $directories = [
+            $logsDir,
+            $sessionsDir,
+            $viewsDir,
+            $cacheDir,
+            $bootstrapCacheDir,
+        ];
+
+        foreach ($directories as $dir) {
+            if (!is_dir($dir)) {
+                if (!@mkdir($dir, 0775, true)) {
+                    \Log::warning("Setup Wizard: Failed to create directory: {$dir}");
+                    // سعی کن با sudo
+                    $dirEscaped = escapeshellarg($dir);
+                    $output = shell_exec("sudo mkdir -p {$dirEscaped} 2>&1");
+                    if (!is_dir($dir)) {
+                        throw new \Exception("نمی‌توان پوشه را ایجاد کرد: {$dir}");
+                    }
+                }
+            }
+        }
+
+        // تنظیم مجوزها
+        $chmodDirs = [$storageDir, $bootstrapCacheDir];
+        foreach ($chmodDirs as $dir) {
+            if (is_dir($dir)) {
+                @chmod($dir, 0775);
+                // سعی کن با sudo
+                $dirEscaped = escapeshellarg($dir);
+                shell_exec("sudo chmod -R 775 {$dirEscaped} 2>&1");
+            }
+        }
+
+        // تنظیم مالکیت
+        $user = 'www-data';
+        if (!shell_exec("id {$user} 2>&1")) {
+            $user = 'nginx';
+        }
+
+        if (shell_exec("id {$user} 2>&1")) {
+            foreach ($chmodDirs as $dir) {
+                if (is_dir($dir)) {
+                    $dirEscaped = escapeshellarg($dir);
+                    shell_exec("sudo chown -R {$user}:{$user} {$dirEscaped} 2>&1");
+                }
+            }
+        }
+
+        // ایجاد فایل .gitkeep
+        $gitkeepFiles = [
+            $logsDir . '/.gitkeep',
+            $sessionsDir . '/.gitkeep',
+            $viewsDir . '/.gitkeep',
+            $cacheDir . '/.gitkeep',
+            $bootstrapCacheDir . '/.gitkeep',
+        ];
+
+        foreach ($gitkeepFiles as $file) {
+            if (!file_exists($file)) {
+                @file_put_contents($file, '');
+            }
+        }
+
+        \Log::info('Setup Wizard: Storage directories created successfully', [
+            'storage_dir' => $storageDir,
+            'logs_dir' => $logsDir,
+        ]);
     }
 
     /**
@@ -527,7 +616,7 @@ class SetupWizardController extends Controller
         }
 
         $envFilePath = $this->projectRoot . '/.env';
-        
+
         // بررسی مجوز نوشتن
         if (!is_writable(dirname($envFilePath)) && !is_writable($this->projectRoot)) {
             throw new \Exception('مسیر پروژه قابل نوشتن نیست! لطفاً مجوزها را بررسی کنید: ' . $this->projectRoot);
@@ -672,7 +761,7 @@ class SetupWizardController extends Controller
     private function saveSettingsToDatabase($settings)
     {
         $dbPath = $this->projectRoot . '/vpn_bot.db';
-        
+
         // بررسی وجود دیتابیس
         if (!file_exists($dbPath)) {
             throw new \Exception('دیتابیس یافت نشد! لطفاً ابتدا migrations را اجرا کنید.');
