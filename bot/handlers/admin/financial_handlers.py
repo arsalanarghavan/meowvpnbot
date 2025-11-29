@@ -56,16 +56,20 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
 
     db = SessionLocal()
     try:
+        # Start transaction
+        db.begin()
+        
         tx = transaction_queries.get_transaction_by_id(db, tx_id)
         if not tx or tx.status != TransactionStatus.PENDING:
             await query.edit_message_text(_('messages.admin_tx_already_processed'), reply_markup=None)
+            db.rollback()
             return
 
         original_message = query.message.text
 
         if action == "confirm_receipt":
             # Update card account's current_amount if a smart card was used
-            from database.models.queries import card_queries
+            from database.queries import card_queries
             card = card_queries.get_available_card_for_amount(db, tx.amount)
             if card:
                 card_queries.add_amount_to_card(db, card.id, tx.amount)
@@ -104,6 +108,9 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
                 # --- Award Commission ---
                 award_commission_for_purchase(db, tx)
                 # ---
+                
+                # Commit transaction
+                db.commit()
 
                 await query.edit_message_text(original_message + "\n\n" + _('messages.admin_service_created_successfully', tx_id=tx_id), reply_markup=None)
 
@@ -115,6 +122,9 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
             else:  # Regular wallet charge
                 user_queries.update_wallet_balance(db, tx.user_id, tx.amount)
                 transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.COMPLETED)
+                
+                # Commit transaction
+                db.commit()
 
                 await query.edit_message_text(original_message + "\n\n" + _('messages.admin_receipt_confirmed', tx_id=tx_id), reply_markup=None)
                 await context.bot.send_message(
@@ -124,6 +134,8 @@ async def handle_receipt_confirmation(update: Update, context: ContextTypes.DEFA
 
         elif action == "reject_receipt":
             transaction_queries.update_transaction_status(db, tx_id, TransactionStatus.FAILED)
+            # Commit transaction
+            db.commit()
             await query.edit_message_text(original_message + "\n\n" + _('messages.admin_receipt_rejected', tx_id=tx_id), reply_markup=None)
             await context.bot.send_message(
                 chat_id=tx.user_id,

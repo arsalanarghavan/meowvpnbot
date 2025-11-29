@@ -21,6 +21,7 @@ from services.zarinpal import Zarinpal
 from services.panel_api_factory import get_panel_api
 from services.marzban_api import MarzbanAPI
 from bot.logic.commission import award_commission_for_purchase # <-- ایمپورت جدید
+from core.audit_logger import log_payment_action
 
 
 async def ask_for_payment_method(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -39,17 +40,20 @@ async def ask_for_payment_method(update: Update, context: ContextTypes.DEFAULT_T
 
 async def receive_charge_amount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives the amount to charge the wallet and shows payment methods."""
-    try:
-        amount = int(update.message.text)
-        if amount < 1000:  # Zarinpal has a minimum amount of 1000 Toman
-            raise ValueError
-        context.user_data['charge_amount'] = amount
-        # Delete the user's message (the amount)
-        await update.message.delete()
-    except (ValueError, TypeError):
+    from bot.utils.validators import validate_amount, sanitize_text
+    
+    # Sanitize and validate input
+    text_input = sanitize_text(update.message.text, max_length=20)
+    amount = validate_amount(text_input, min_amount=1000, max_amount=100000000)  # Max 100 million Toman
+    
+    if amount is None:
         await update.message.reply_text(_('messages.error_invalid_amount_min_1000'))
         # We stay in the same state to ask for the amount again
         return AWAITING_AMOUNT
+    
+    context.user_data['charge_amount'] = amount
+    # Delete the user's message (the amount)
+    await update.message.delete()
 
     text = _('messages.choose_payment_method')
     reply_markup = get_payment_methods_keyboard(purchase_flow=False)
@@ -90,7 +94,7 @@ async def card_to_card_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 return END_CONVERSION
         
         # Try to get a card from the new card management system
-        from database.models.queries import card_queries
+        from database.queries import card_queries
         selected_card = card_queries.get_available_card_for_amount(db, amount)
         
         if selected_card:
@@ -206,6 +210,16 @@ async def start_online_payment(update: Update, context: ContextTypes.DEFAULT_TYP
         # Create a pending transaction
         tx = transaction_queries.create_transaction(db, user.id, amount, tx_type, plan_id)
         
+        # Log payment initiation
+        log_payment_action(
+            user_id=user.id,
+            action='payment_initiated',
+            transaction_id=tx.id,
+            amount=amount,
+            payment_method='zarinpal',
+            details={'plan_id': plan_id}
+        )
+        
         # Request payment from Zarinpal
         zarinpal_api = Zarinpal()
         if not zarinpal_api.merchant_id:
@@ -240,7 +254,7 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     try:
-    tx_id = int(query.data.split('_')[2])
+        tx_id = int(query.data.split('_')[2])
     except (ValueError, IndexError) as e:
         await query.edit_message_text(_('messages.error_general'))
         await log_error(context, e, "parsing verify payment callback")
@@ -248,6 +262,9 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
     
     db = SessionLocal()
     try:
+        # Start transaction
+        db.begin()
+        
         tx = transaction_queries.get_transaction_by_id(db, tx_id)
         if not tx or tx.status != TransactionStatus.PENDING:
             await query.edit_message_text(_('messages.admin_tx_already_processed'))
@@ -263,6 +280,16 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
         if is_success:
             transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
             transaction_queries.update_transaction_tracking_code(db, tx.id, ref_id)
+            
+            # Log successful payment
+            log_payment_action(
+                user_id=tx.user_id,
+                action='payment_completed',
+                transaction_id=tx.id,
+                amount=tx.amount,
+                payment_method='zarinpal',
+                details={'ref_id': ref_id}
+            )
 
             if tx.type == TransactionType.SERVICE_PURCHASE and tx.plan:
                 # --- Multi-Panel Service Creation Logic ---
@@ -302,14 +329,32 @@ async def verify_online_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 award_commission_for_purchase(db, tx)
                 # ---
                 
+                # Commit transaction
+                db.commit()
+                
                 await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 
             else: # Wallet Charge
                 user_queries.update_wallet_balance(db, tx.user_id, tx.amount)
+                # Commit transaction
+                db.commit()
                 await query.edit_message_text(_('messages.payment_successful', amount=tx.amount, ref_id=ref_id))
         
         else: # Payment failed or not completed
             transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.FAILED)
+            # Commit transaction
+            db.commit()
+            
+            # Log failed payment
+            log_payment_action(
+                user_id=tx.user_id,
+                action='payment_failed',
+                transaction_id=tx.id,
+                amount=tx.amount,
+                payment_method='zarinpal',
+                details={'error_code': ref_id}
+            )
+            
             await query.edit_message_text(_('messages.payment_failed', error_code=ref_id))
 
     except Exception as e:

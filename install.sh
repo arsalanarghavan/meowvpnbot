@@ -513,6 +513,9 @@ if [ -d "$SITE_DIR" ]; then
         # تولید random secret
         WIZARD_SECRET=$(openssl rand -hex 32)
         
+        # تعیین مسیر دیتابیس ربات (مطلق برای اطمینان از همگام‌سازی)
+        BOT_DB_PATH="$PROJECT_ROOT/vpn_bot.db"
+        
         cat > .env << ENVFILE
 APP_NAME="MeowVPN Panel"
 APP_ENV=production
@@ -530,6 +533,9 @@ CACHE_DRIVER=file
 ADMIN_USERNAME=
 ADMIN_PASSWORD=
 
+# Bot Database Path (برای دسترسی Laravel به دیتابیس ربات)
+BOT_DATABASE_PATH=${BOT_DB_PATH}
+
 # Setup Wizard
 SETUP_WIZARD_ENABLED=true
 SETUP_WIZARD_SECRET=${WIZARD_SECRET}
@@ -538,6 +544,19 @@ FIRST_RUN=true
 ENVFILE
         print_success "فایل .env پنل وب ایجاد شد"
         print_info "اطلاعات ادمین در Setup Wizard تنظیم خواهد شد"
+    else
+        # اگر .env موجود است، مطمئن شو BOT_DATABASE_PATH تنظیم شده است
+        BOT_DB_PATH="$PROJECT_ROOT/vpn_bot.db"
+        if ! grep -q "^BOT_DATABASE_PATH=" .env 2>/dev/null; then
+            print_info "اضافه کردن BOT_DATABASE_PATH به .env موجود..."
+            echo "" >> .env
+            echo "# Bot Database Path (برای دسترسی Laravel به دیتابیس ربات)" >> .env
+            echo "BOT_DATABASE_PATH=${BOT_DB_PATH}" >> .env
+            print_success "BOT_DATABASE_PATH به .env اضافه شد"
+        else
+            # به‌روزرسانی مسیر در صورت نیاز
+            sed -i "s|^BOT_DATABASE_PATH=.*|BOT_DATABASE_PATH=${BOT_DB_PATH}|" .env
+        fi
     fi
     
     # تولید APP_KEY
@@ -557,6 +576,12 @@ ENVFILE
             sudo chmod 664 .env
         fi
         print_success "مجوزهای www-data تنظیم شد"
+        # تنظیم مجوزهای دیتابیس ربات (اگر وجود دارد)
+        if [ -f "$PROJECT_ROOT/vpn_bot.db" ]; then
+            sudo chown www-data:www-data "$PROJECT_ROOT/vpn_bot.db"
+            sudo chmod 664 "$PROJECT_ROOT/vpn_bot.db"
+            print_info "مجوزهای دیتابیس ربات تنظیم شد"
+        fi
     elif command -v nginx &> /dev/null || id -u nginx &> /dev/null 2>&1; then
         sudo chown -R nginx:nginx storage bootstrap/cache
         # مجوز نوشتن برای .env
@@ -565,6 +590,12 @@ ENVFILE
             sudo chmod 664 .env
         fi
         print_success "مجوزهای nginx تنظیم شد"
+        # تنظیم مجوزهای دیتابیس ربات (اگر وجود دارد)
+        if [ -f "$PROJECT_ROOT/vpn_bot.db" ]; then
+            sudo chown nginx:nginx "$PROJECT_ROOT/vpn_bot.db"
+            sudo chmod 664 "$PROJECT_ROOT/vpn_bot.db"
+            print_info "مجوزهای دیتابیس ربات تنظیم شد"
+        fi
     fi
     
     # پاک‌سازی کش

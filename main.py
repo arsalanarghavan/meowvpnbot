@@ -36,12 +36,36 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
     tb_string = "".join(tb_list)
 
+    # Sanitize update data to prevent leaking sensitive information
     update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    
+    # Remove sensitive fields from update data
+    if isinstance(update_str, dict):
+        sensitive_fields = ['password', 'token', 'secret', 'api_key', 'merchant_id', 'authorization']
+        for field in sensitive_fields:
+            if field in update_str:
+                update_str[field] = "***REDACTED***"
+    
+    # Sanitize user_data
+    user_data_safe = {}
+    if context.user_data:
+        sensitive_keys = ['password', 'token', 'secret', 'api_key', 'merchant_id']
+        for key, value in context.user_data.items():
+            if any(sensitive in key.lower() for sensitive in sensitive_keys):
+                user_data_safe[key] = "***REDACTED***"
+            else:
+                user_data_safe[key] = value
+    
+    # Truncate traceback if too long
+    max_tb_length = 2000
+    if len(tb_string) > max_tb_length:
+        tb_string = tb_string[:max_tb_length] + "\n... (truncated)"
     
     message = (
         f"<b>🚨 An exception was raised while handling an update</b>\n\n"
-        f"<b>Update:</b>\n<pre>{html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}</pre>\n\n"
-        f"<b>User Data:</b>\n<pre>{html.escape(str(context.user_data))}</pre>\n\n"
+        f"<b>Error:</b> {html.escape(str(context.error))}\n\n"
+        f"<b>Update (sanitized):</b>\n<pre>{html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}</pre>\n\n"
+        f"<b>User Data (sanitized):</b>\n<pre>{html.escape(str(user_data_safe))}</pre>\n\n"
         f"<b>Traceback:</b>\n<pre>{html.escape(tb_string)}</pre>"
     )
 
@@ -58,6 +82,15 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 def main() -> None:
     """The main function to run the bot."""
     logger.info("Starting bot...")
+
+    # Validate configuration
+    try:
+        from core.config import validate_config
+        validate_config()
+        logger.info("Configuration validation passed.")
+    except ValueError as e:
+        logger.critical(f"Configuration validation failed: {e}")
+        raise
 
     # Validate required configuration
     if not BOT_TOKEN or BOT_TOKEN == "your_bot_token_here":

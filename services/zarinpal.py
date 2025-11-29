@@ -44,7 +44,10 @@ class Zarinpal:
             "metadata": {"order_id": str(transaction_id)}
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            follow_redirects=True
+        ) as client:
             try:
                 response = await client.post(ZARINPAL_API_REQUEST, json=payload)
                 response.raise_for_status()
@@ -62,11 +65,17 @@ class Zarinpal:
 
                 payment_url = ZARINPAL_START_PAY_URL.format(authority=authority)
                 return authority, payment_url
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout during Zarinpal payment request: {e}")
+                return None, None
+            except httpx.ConnectError as e:
+                logger.error(f"Connection error to Zarinpal API: {e}")
+                return None, None
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error during Zarinpal payment request: {e.response.text}")
+                logger.error(f"HTTP {e.response.status_code} error during Zarinpal payment request: {e.response.text}")
                 return None, None
             except Exception as e:
-                logger.error(f"An unexpected error occurred during Zarinpal request: {e}")
+                logger.error(f"An unexpected error occurred during Zarinpal request: {e}", exc_info=True)
                 return None, None
 
     async def verify_payment(self, amount: int, authority: str) -> (bool, str):
@@ -84,7 +93,10 @@ class Zarinpal:
             "authority": authority
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            follow_redirects=True
+        ) as client:
             try:
                 response = await client.post(ZARINPAL_API_VERIFY, json=payload)
                 response.raise_for_status()
@@ -100,9 +112,15 @@ class Zarinpal:
                     logger.error(f"Zarinpal verification error: Code {error_code}")
                     return False, str(error_code)
 
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout during Zarinpal payment verification: {e}")
+                return False, "timeout_error"
+            except httpx.ConnectError as e:
+                logger.error(f"Connection error to Zarinpal API: {e}")
+                return False, "connection_error"
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error during Zarinpal payment verification: {e.response.text}")
+                logger.error(f"HTTP {e.response.status_code} error during Zarinpal payment verification: {e.response.text}")
                 return False, "http_error"
             except Exception as e:
-                logger.error(f"An unexpected error occurred during Zarinpal verification: {e}")
+                logger.error(f"An unexpected error occurred during Zarinpal verification: {e}", exc_info=True)
                 return False, "unexpected_error"

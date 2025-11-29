@@ -1,302 +1,269 @@
-@extends('layouts.rtl.master')
+@extends('layouts.app.dashboard')
 @section('title', 'جزئیات کاربر')
 
-@section('breadcrumb-title')
-	<h2>جزئیات <span>کاربر</span></h2>
-@endsection
-
-@section('breadcrumb-items')
-    <li class="breadcrumb-item"><a href="{{ route('users.index') }}">کاربران</a></li>
-	<li class="breadcrumb-item active">{{ $user['user_id'] }}</li>
-@endsection
-
 @section('content')
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5>اطلاعات کاربر</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table table-borderless">
-                        <tr>
-                            <td><strong>شناسه:</strong></td>
-                            <td>{{ $user['user_id'] }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>نقش:</strong></td>
-                            <td>
-                                @if($user['role'] == 'admin')
-                                    <span class="badge badge-danger">ادمین</span>
-                                @elseif($user['role'] == 'marketer')
-                                    <span class="badge badge-warning">بازاریاب</span>
-                                @else
-                                    <span class="badge badge-info">مشتری</span>
-                                @endif
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><strong>موجودی کیف پول:</strong></td>
-                            <td>{{ number_format($user['wallet_balance']) }} تومان</td>
-                        </tr>
-                        <tr>
-                            <td><strong>موجودی کمیسیون:</strong></td>
-                            <td>{{ number_format($user['commission_balance']) }} تومان</td>
-                        </tr>
-                        <tr>
-                            <td><strong>تاریخ عضویت:</strong></td>
-                            <td>{{ \Carbon\Carbon::parse($user['created_at'])->format('Y/m/d H:i') }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>وضعیت:</strong></td>
-                            <td>
-                                @if($user['is_active'])
-                                    <span class="badge badge-success">فعال</span>
-                                @else
-                                    <span class="badge badge-danger">مسدود</span>
-                                @endif
-                            </td>
-                        </tr>
-                    </table>
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight">جزئیات کاربر</h1>
+            <p class="text-muted-foreground">شناسه کاربری: {{ $user['user_id'] }}</p>
+        </div>
+        <Button variant="outline" as="a" href="{{ route('users.index') }}">بازگشت</Button>
+    </div>
 
-                    <div class="mt-3">
-                        <button class="btn btn-sm btn-primary btn-block" onclick="changeRole()">تغییر نقش</button>
-                        <button class="btn btn-sm btn-info btn-block" onclick="addBalance()">افزایش موجودی</button>
-                        <button class="btn btn-sm btn-warning btn-block" onclick="toggleStatus()">تغییر وضعیت</button>
+    <div class="grid gap-6 md:grid-cols-3">
+        <!-- اطلاعات کاربر -->
+        <Card class="md:col-span-1">
+            <CardHeader>
+                <CardTitle>اطلاعات کاربر</CardTitle>
+            </CardHeader>
+            <CardContent class="space-y-4">
+                <div>
+                    <Label class="text-xs text-muted-foreground">شناسه کاربری</Label>
+                    <p class="text-sm font-medium">{{ $user['user_id'] }}</p>
+                </div>
+                <Separator />
+                <div>
+                    <Label class="text-xs text-muted-foreground">نقش</Label>
+                    <div class="mt-1">
+                        @if($user['role'] == 'admin')
+                            <Badge variant="destructive">ادمین</Badge>
+                        @elseif($user['role'] == 'marketer')
+                            <Badge variant="outline">بازاریاب</Badge>
+                        @else
+                            <Badge variant="secondary">مشتری</Badge>
+                        @endif
                     </div>
                 </div>
-            </div>
-        </div>
+                <Separator />
+                <div>
+                    <Label class="text-xs text-muted-foreground">موجودی کیف پول</Label>
+                    <p class="text-sm font-medium">{{ number_format($user['wallet_balance']) }} تومان</p>
+                </div>
+                <Separator />
+                <div>
+                    <Label class="text-xs text-muted-foreground">موجودی کمیسیون</Label>
+                    <p class="text-sm font-medium">{{ number_format($user['commission_balance']) }} تومان</p>
+                </div>
+                <Separator />
+                <div>
+                    <Label class="text-xs text-muted-foreground">تاریخ عضویت</Label>
+                    <p class="text-sm font-medium">{{ \Carbon\Carbon::parse($user['created_at'])->format('Y/m/d H:i') }}</p>
+                </div>
+                <Separator />
+                <div>
+                    <Label class="text-xs text-muted-foreground">وضعیت</Label>
+                    <div class="mt-1">
+                        @if($user['is_active'])
+                            <Badge variant="secondary">فعال</Badge>
+                        @else
+                            <Badge variant="destructive">مسدود</Badge>
+                        @endif
+                    </div>
+                </div>
+                <Separator />
+                <div class="space-y-2">
+                    <Button variant="outline" class="w-full" onclick="changeRole()">تغییر نقش</Button>
+                    <Button variant="outline" class="w-full" onclick="addBalance()">افزایش موجودی</Button>
+                    <Button 
+                        variant="{{ $user['is_active'] ? 'destructive' : 'default' }}" 
+                        class="w-full" 
+                        onclick="toggleStatus()"
+                    >
+                        {{ $user['is_active'] ? 'مسدود کردن' : 'فعال کردن' }}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
 
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5>سرویس‌های کاربر</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>نام کاربری</th>
-                                <th>پلن</th>
-                                <th>تاریخ انقضا</th>
-                                <th>وضعیت</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($services as $service)
-                            <tr>
-                                <td>{{ $service['username_in_panel'] }}</td>
-                                <td>{{ $service['plan_name'] }}</td>
-                                <td>{{ \Carbon\Carbon::parse($service['expire_date'])->format('Y/m/d') }}</td>
-                                <td>
-                                    @if($service['is_active'])
-                                        <span class="badge badge-success">فعال</span>
-                                    @else
-                                        <span class="badge badge-danger">منقضی</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="4" class="text-center">سرویسی یافت نشد</td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <!-- سرویس‌ها و تراکنش‌ها -->
+        <div class="md:col-span-2 space-y-6">
+            <!-- سرویس‌های کاربر -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>سرویس‌های کاربر</CardTitle>
+                    <CardDescription>لیست سرویس‌های فعال و منقضی شده</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div class="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>نام کاربری</TableHead>
+                                    <TableHead>پلن</TableHead>
+                                    <TableHead>تاریخ انقضا</TableHead>
+                                    <TableHead>وضعیت</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                @forelse($services as $service)
+                                <TableRow>
+                                    <TableCell class="font-medium">{{ $service['username_in_panel'] }}</TableCell>
+                                    <TableCell>{{ $service['plan_name'] }}</TableCell>
+                                    <TableCell>{{ \Carbon\Carbon::parse($service['expire_date'])->format('Y/m/d') }}</TableCell>
+                                    <TableCell>
+                                        @if($service['is_active'])
+                                            <Badge variant="secondary">فعال</Badge>
+                                        @else
+                                            <Badge variant="destructive">منقضی</Badge>
+                                        @endif
+                                    </TableCell>
+                                </TableRow>
+                                @empty
+                                <TableRow>
+                                    <TableCell colspan="4" class="text-center text-muted-foreground py-8">
+                                        سرویسی یافت نشد
+                                    </TableCell>
+                                </TableRow>
+                                @endforelse
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
 
-            <div class="card mt-3">
-                <div class="card-header">
-                    <h5>تراکنش‌های اخیر</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>مبلغ</th>
-                                <th>نوع</th>
-                                <th>وضعیت</th>
-                                <th>تاریخ</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($transactions as $transaction)
-                            <tr>
-                                <td>{{ number_format($transaction['amount']) }} تومان</td>
-                                <td>{{ $transaction['type'] }}</td>
-                                <td>
-                                    @if($transaction['status'] == 'موفق')
-                                        <span class="badge badge-success">موفق</span>
-                                    @elseif($transaction['status'] == 'در انتظار')
-                                        <span class="badge badge-warning">در انتظار</span>
-                                    @else
-                                        <span class="badge badge-danger">ناموفق</span>
-                                    @endif
-                                </td>
-                                <td>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('Y/m/d H:i') }}</td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="4" class="text-center">تراکنشی یافت نشد</td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <!-- تراکنش‌های اخیر -->
+            <Card>
+                <CardHeader>
+                    <CardTitle>تراکنش‌های اخیر</CardTitle>
+                    <CardDescription>تاریخچه تراکنش‌های کاربر</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div class="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>مبلغ</TableHead>
+                                    <TableHead>نوع</TableHead>
+                                    <TableHead>وضعیت</TableHead>
+                                    <TableHead>تاریخ</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                @forelse($transactions as $transaction)
+                                <TableRow>
+                                    <TableCell class="font-medium">{{ number_format($transaction['amount']) }} تومان</TableCell>
+                                    <TableCell>{{ $transaction['type'] }}</TableCell>
+                                    <TableCell>
+                                        @if($transaction['status'] == 'موفق')
+                                            <Badge variant="secondary">موفق</Badge>
+                                        @elseif($transaction['status'] == 'در انتظار')
+                                            <Badge variant="outline">در انتظار</Badge>
+                                        @else
+                                            <Badge variant="destructive">ناموفق</Badge>
+                                        @endif
+                                    </TableCell>
+                                    <TableCell>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('Y/m/d H:i') }}</TableCell>
+                                </TableRow>
+                                @empty
+                                <TableRow>
+                                    <TableCell colspan="4" class="text-center text-muted-foreground py-8">
+                                        تراکنشی یافت نشد
+                                    </TableCell>
+                                </TableRow>
+                                @endforelse
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     </div>
 </div>
 @endsection
 
-@section('script')
-<script src="{{asset('assets/js/sweet-alert/sweetalert.min.js')}}"></script>
+@section('scripts')
 <script>
 const userId = {{ $user['user_id'] }};
 const updateUrl = "{{ route('users.update', $user['user_id']) }}";
 
 function changeRole() {
-    swal({
-        title: "تغییر نقش کاربر",
-        text: "نقش جدید را انتخاب کنید:",
-        type: "input",
-        inputType: "select",
-        inputOptions: {
-            "customer": "مشتری",
-            "marketer": "بازاریاب",
-            "admin": "ادمین"
+    // استفاده از Dialog component برای تغییر نقش
+    // در اینجا می‌توان از SweetAlert یا Dialog component استفاده کرد
+    const role = prompt('نقش جدید را انتخاب کنید:\n1. customer\n2. marketer\n3. admin');
+    if (!role) return;
+    
+    fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
         },
-        showCancelButton: true,
-        confirmButtonText: "تغییر نقش",
-        cancelButtonText: "لغو",
-        inputPlaceholder: "نقش را انتخاب کنید",
-        inputValidator: function(value) {
-            return new Promise(function(resolve, reject) {
-                if (value) {
-                    resolve();
-                } else {
-                    reject("لطفاً یک نقش انتخاب کنید");
-                }
-            });
+        body: JSON.stringify({
+            action: 'change_role',
+            role: role
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('نقش کاربر با موفقیت تغییر کرد');
+            location.reload();
+        } else {
+            alert(data.message || 'خطایی رخ داد');
         }
-    }).then(function(result) {
-        if (result.value) {
-            fetch(updateUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    action: 'change_role',
-                    role: result.value
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    swal("موفق!", "نقش کاربر با موفقیت تغییر کرد", "success")
-                        .then(() => location.reload());
-                } else {
-                    swal("خطا!", data.message || "خطایی رخ داد", "error");
-                }
-            })
-            .catch(error => {
-                swal("خطا!", "خطا در ارتباط با سرور", "error");
-            });
-        }
+    })
+    .catch(error => {
+        alert('خطا در ارتباط با سرور');
     });
 }
 
 function addBalance() {
-    swal({
-        title: "افزایش موجودی",
-        text: "مبلغ مورد نظر را وارد کنید (تومان):",
-        type: "input",
-        inputType: "number",
-        showCancelButton: true,
-        confirmButtonText: "افزایش موجودی",
-        cancelButtonText: "لغو",
-        inputPlaceholder: "مبلغ را وارد کنید",
-        inputValidator: function(value) {
-            return new Promise(function(resolve, reject) {
-                if (value && parseFloat(value) > 0) {
-                    resolve();
-                } else {
-                    reject("لطفاً یک مبلغ معتبر وارد کنید");
-                }
-            });
+    const amount = prompt('مبلغ مورد نظر را وارد کنید (تومان):');
+    if (!amount || parseFloat(amount) <= 0) return;
+    
+    fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            action: 'add_balance',
+            amount: parseFloat(amount)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`موجودی کاربر ${parseFloat(amount).toLocaleString()} تومان افزایش یافت`);
+            location.reload();
+        } else {
+            alert(data.message || 'خطایی رخ داد');
         }
-    }).then(function(result) {
-        if (result.value) {
-            const amount = parseFloat(result.value);
-            fetch(updateUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    action: 'add_balance',
-                    amount: amount
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    swal("موفق!", `موجودی کاربر ${amount.toLocaleString()} تومان افزایش یافت`, "success")
-                        .then(() => location.reload());
-                } else {
-                    swal("خطا!", data.message || "خطایی رخ داد", "error");
-                }
-            })
-            .catch(error => {
-                swal("خطا!", "خطا در ارتباط با سرور", "error");
-            });
-        }
+    })
+    .catch(error => {
+        alert('خطا در ارتباط با سرور');
     });
 }
 
 function toggleStatus() {
     const currentStatus = {{ $user['is_active'] ? 'true' : 'false' }};
-    const statusText = currentStatus ? "مسدود" : "فعال";
+    const statusText = currentStatus ? 'مسدود' : 'فعال';
     
-    swal({
-        title: "تغییر وضعیت کاربر",
-        text: `آیا مطمئن هستید که می‌خواهید کاربر را ${statusText} کنید؟`,
-        type: "warning",
-        showCancelButton: true,
-        confirmButtonText: `بله، ${statusText} کن`,
-        cancelButtonText: "لغو",
-        confirmButtonColor: "#d33"
-    }).then(function(result) {
-        if (result.value) {
-            fetch(updateUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({
-                    action: 'toggle_status'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    swal("موفق!", `وضعیت کاربر با موفقیت ${statusText} شد`, "success")
-                        .then(() => location.reload());
-                } else {
-                    swal("خطا!", data.message || "خطایی رخ داد", "error");
-                }
-            })
-            .catch(error => {
-                swal("خطا!", "خطا در ارتباط با سرور", "error");
-            });
+    if (!confirm(`آیا مطمئن هستید که می‌خواهید کاربر را ${statusText} کنید؟`)) return;
+    
+    fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({
+            action: 'toggle_status'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`وضعیت کاربر با موفقیت ${statusText} شد`);
+            location.reload();
+        } else {
+            alert(data.message || 'خطایی رخ داد');
         }
+    })
+    .catch(error => {
+        alert('خطا در ارتباط با سرور');
     });
 }
 </script>

@@ -7,23 +7,16 @@ use Illuminate\Support\Str;
 
 class GiftCardController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست کارت‌های هدیه
      */
     public function index(Request $request)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         $status = $request->get('status');
         
@@ -48,13 +41,25 @@ class GiftCardController extends Controller
         $giftCards = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار
-        $stats = [
-            'total' => $pdo->query("SELECT COUNT(*) FROM gift_cards")->fetchColumn(),
-            'used' => $pdo->query("SELECT COUNT(*) FROM gift_cards WHERE is_used = 1")->fetchColumn(),
-            'unused' => $pdo->query("SELECT COUNT(*) FROM gift_cards WHERE is_used = 0")->fetchColumn(),
-            'total_amount' => $pdo->query("SELECT IFNULL(SUM(amount), 0) FROM gift_cards")->fetchColumn(),
-            'used_amount' => $pdo->query("SELECT IFNULL(SUM(amount), 0) FROM gift_cards WHERE is_used = 1")->fetchColumn(),
-        ];
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gift_cards");
+        $stmt->execute();
+        $stats['total'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gift_cards WHERE is_used = 1");
+        $stmt->execute();
+        $stats['used'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gift_cards WHERE is_used = 0");
+        $stmt->execute();
+        $stats['unused'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(amount), 0) FROM gift_cards");
+        $stmt->execute();
+        $stats['total_amount'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(amount), 0) FROM gift_cards WHERE is_used = 1");
+        $stmt->execute();
+        $stats['used_amount'] = $stmt->fetchColumn();
         
         return view('gift-cards.index', compact('giftCards', 'stats'));
     }
@@ -77,12 +82,12 @@ class GiftCardController extends Controller
             'count' => 'required|integer|min:1|max:100',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             $pdo->beginTransaction();
             
             $count = $request->count;
@@ -129,12 +134,12 @@ class GiftCardController extends Controller
      */
     public function destroy($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // بررسی استفاده شده بودن
             $stmt = $pdo->prepare("SELECT is_used FROM gift_cards WHERE id = :id");
@@ -166,6 +171,75 @@ class GiftCardController extends Controller
         $part3 = strtoupper(Str::random(4));
         
         return "{$part1}-{$part2}-{$part3}";
+    }
+
+    /**
+     * دریافت لیست کارت‌های هدیه به صورت JSON (API)
+     */
+    public function apiIndex(Request $request)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $query = "
+                SELECT g.*, u.user_id
+                FROM gift_cards g
+                LEFT JOIN users u ON g.used_by_user_id = u.user_id
+                WHERE 1=1
+            ";
+            $params = [];
+            
+            if ($request->has('status')) {
+                $isUsed = $request->get('status') === 'used' ? 1 : 0;
+                $query .= " AND g.is_used = :status";
+                $params['status'] = $isUsed;
+            }
+            
+            $query .= " ORDER BY g.id DESC";
+            
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
+            $giftCards = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            return response()->json(['success' => true, 'data' => $giftCards]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات کارت هدیه به صورت JSON (API)
+     */
+    public function apiShow($id)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("
+                SELECT g.*, u.user_id
+                FROM gift_cards g
+                LEFT JOIN users u ON g.used_by_user_id = u.user_id
+                WHERE g.id = :id
+            ");
+            $stmt->execute(['id' => $id]);
+            $giftCard = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$giftCard) {
+                return response()->json(['success' => false, 'message' => 'کارت هدیه یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $giftCard]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 }
 

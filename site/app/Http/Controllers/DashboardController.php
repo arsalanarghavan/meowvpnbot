@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Helpers\StatusHelper;
 
 class DashboardController extends Controller
 {
@@ -12,96 +13,164 @@ class DashboardController extends Controller
      */
     public function index()
     {
-        // اتصال به دیتابیس SQLite ربات
-        $botDbPath = base_path('../vpn_bot.db');
-        
-        if (!file_exists($botDbPath)) {
+        if (!$this->botDatabaseExists()) {
             return view('dashboard.index')->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         // آمارگیری
-        $stats = $this->getDashboardStats($botDbPath);
+        $stats = $this->getDashboardStats();
         
         return view('dashboard.index', compact('stats'));
     }
 
     /**
+     * دریافت آمار داشبورد به صورت JSON (API)
+     */
+    public function stats()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $stats = $this->getDashboardStats();
+            return response()->json(['success' => true, 'data' => $stats]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * دریافت آمار داشبورد
      */
-    private function getDashboardStats($dbPath)
+    private function getDashboardStats()
     {
-        $pdo = new \PDO("sqlite:$dbPath");
+        $pdo = $this->getBotConnection();
         
         // آمار کاربران
-        $totalUsers = $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        $activeUsers = $pdo->query("SELECT COUNT(*) FROM users WHERE is_active = 1")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users");
+        $stmt->execute();
+        $totalUsers = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1");
+        $stmt->execute();
+        $activeUsers = $stmt->fetchColumn();
         $blockedUsers = $totalUsers - $activeUsers;
-        $marketers = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'marketer'")->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = :role");
+        $stmt->execute(['role' => 'marketer']);
+        $marketers = $stmt->fetchColumn();
         
         // آمار سرویس‌ها
-        $totalServices = $pdo->query("SELECT COUNT(*) FROM services")->fetchColumn();
-        $activeServices = $pdo->query("SELECT COUNT(*) FROM services WHERE is_active = 1")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM services");
+        $stmt->execute();
+        $totalServices = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM services WHERE is_active = 1");
+        $stmt->execute();
+        $activeServices = $stmt->fetchColumn();
         $expiredServices = $totalServices - $activeServices;
         
         // آمار مالی
-        $totalRevenue = $pdo->query("SELECT IFNULL(SUM(amount), 0) FROM transactions WHERE status = 'موفق'")->fetchColumn();
-        $pendingTransactions = $pdo->query("SELECT COUNT(*) FROM transactions WHERE status = 'در انتظار'")->fetchColumn();
-        $monthlyRevenue = $pdo->query("
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(amount), 0) FROM transactions WHERE status = :status");
+        $stmt->execute(['status' => StatusHelper::TRANSACTION_COMPLETED]);
+        $totalRevenue = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM transactions WHERE status = :status");
+        $stmt->execute(['status' => StatusHelper::TRANSACTION_PENDING]);
+        $pendingTransactions = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("
             SELECT IFNULL(SUM(amount), 0) FROM transactions 
-            WHERE status = 'موفق' 
+            WHERE status = :status 
             AND datetime(created_at) >= datetime('now', '-30 days')
-        ")->fetchColumn();
+        ");
+        $stmt->execute(['status' => StatusHelper::TRANSACTION_COMPLETED]);
+        $monthlyRevenue = $stmt->fetchColumn();
+        
+        // تراکنش‌های امروز
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM transactions 
+            WHERE date(created_at) = date('now')
+        ");
+        $stmt->execute();
+        $todayTransactions = $stmt->fetchColumn();
         
         // آمار پلن‌ها
-        $totalPlans = $pdo->query("SELECT COUNT(*) FROM plans")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM plans");
+        $stmt->execute();
+        $totalPlans = $stmt->fetchColumn();
         
         // آمار پنل‌ها
-        $totalPanels = $pdo->query("SELECT COUNT(*) FROM panels")->fetchColumn();
-        $activePanels = $pdo->query("SELECT COUNT(*) FROM panels WHERE is_active = 1")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM panels");
+        $stmt->execute();
+        $totalPanels = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM panels WHERE is_active = 1");
+        $stmt->execute();
+        $activePanels = $stmt->fetchColumn();
         
         // آمار کارت‌های هدیه
-        $totalGiftCards = $pdo->query("SELECT COUNT(*) FROM gift_cards")->fetchColumn();
-        $usedGiftCards = $pdo->query("SELECT COUNT(*) FROM gift_cards WHERE is_used = 1")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gift_cards");
+        $stmt->execute();
+        $totalGiftCards = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM gift_cards WHERE is_used = 1");
+        $stmt->execute();
+        $usedGiftCards = $stmt->fetchColumn();
         $unusedGiftCards = $totalGiftCards - $usedGiftCards;
         
         // آمار کمیسیون‌ها
-        $totalCommissions = $pdo->query("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions")->fetchColumn();
-        $unpaidCommissions = $pdo->query("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE is_paid_out = 0")->fetchColumn();
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions");
+        $stmt->execute();
+        $totalCommissions = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE is_paid_out = 0");
+        $stmt->execute();
+        $unpaidCommissions = $stmt->fetchColumn();
         
         // آخرین کاربران
-        $latestUsers = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT user_id, role, wallet_balance, created_at, is_active 
             FROM users 
             ORDER BY created_at DESC 
             LIMIT 10
-        ")->fetchAll(\PDO::FETCH_ASSOC);
+        ");
+        $stmt->execute();
+        $latestUsers = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آخرین تراکنش‌ها
-        $latestTransactions = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT t.*, u.user_id 
             FROM transactions t
             LEFT JOIN users u ON t.user_id = u.user_id
             ORDER BY t.created_at DESC 
             LIMIT 10
-        ")->fetchAll(\PDO::FETCH_ASSOC);
+        ");
+        $stmt->execute();
+        $latestTransactions = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار سرویس‌های در حال انقضا (7 روز آینده)
-        $expiringServices = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT COUNT(*) FROM services 
             WHERE is_active = 1 
             AND datetime(expire_date) <= datetime('now', '+7 days')
             AND datetime(expire_date) >= datetime('now')
-        ")->fetchColumn();
+        ");
+        $stmt->execute();
+        $expiringServices = $stmt->fetchColumn();
         
         // نمودار درآمد 30 روز اخیر
-        $revenueChart = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT date(created_at) as date, SUM(amount) as total
             FROM transactions 
-            WHERE status = 'موفق' 
+            WHERE status = :status 
             AND datetime(created_at) >= datetime('now', '-30 days')
             GROUP BY date(created_at)
             ORDER BY date
-        ")->fetchAll(\PDO::FETCH_ASSOC);
+        ");
+        $stmt->execute(['status' => StatusHelper::TRANSACTION_COMPLETED]);
+        $revenueChart = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         return [
             'users' => [
@@ -121,6 +190,10 @@ class DashboardController extends Controller
                 'monthly' => $monthlyRevenue,
                 'pending' => $pendingTransactions,
             ],
+            'transactions' => [
+                'today' => $todayTransactions,
+                'pending' => $pendingTransactions,
+            ],
             'plans' => [
                 'total' => $totalPlans,
             ],
@@ -138,7 +211,9 @@ class DashboardController extends Controller
                 'unpaid' => $unpaidCommissions,
             ],
             'latestUsers' => $latestUsers,
+            'recentUsers' => $latestUsers,
             'latestTransactions' => $latestTransactions,
+            'recentTransactions' => $latestTransactions,
             'revenueChart' => $revenueChart,
         ];
     }

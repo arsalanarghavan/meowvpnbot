@@ -11,36 +11,61 @@ class SetupWizardController extends Controller
 
     public function __construct()
     {
-        // تشخیص مسیر پروژه - اگر در site هستیم، یک سطح بالا برو
         $basePath = base_path();
+        
+        // اولویت اول: مسیر استاندارد نصب (/var/www/meowvpnbot)
+        $standardPath = '/var/www/meowvpnbot';
+        if (is_dir($standardPath) && file_exists($standardPath . '/main.py')) {
+            $this->projectRoot = $standardPath;
+            \Log::info("SetupWizard: Using standard installation path: {$standardPath}");
+            return;
+        }
+
+        // اولویت دوم: تشخیص خودکار از مسیر فعلی
+        // اگر در site هستیم، یک سطح بالا برو
         if (strpos($basePath, '/site') !== false) {
             $this->projectRoot = dirname($basePath);
         } else {
-        $this->projectRoot = base_path('..');
+            $this->projectRoot = base_path('..');
         }
 
-        // اگر مسیر درست نیست، سعی کن از مسیر فعلی استفاده کنی
-        if (!is_dir($this->projectRoot) || !file_exists($this->projectRoot . '/main.py')) {
-            // سعی کن مسیرهای رایج را چک کنی
-            $possiblePaths = [
-                '/var/www/meowvpnbot',
-                '/mnt/1AF200F7F200D941/Projects/Bots/meowvpnbot',
-                dirname($basePath),
-                base_path('..'),
-                realpath(base_path('..')),
-            ];
+        // بررسی صحت مسیر تشخیص داده شده
+        if (is_dir($this->projectRoot) && file_exists($this->projectRoot . '/main.py')) {
+            \Log::info("SetupWizard: Found project root at: {$this->projectRoot}");
+            return;
+        }
 
-            foreach ($possiblePaths as $path) {
-                if ($path && is_dir($path) && file_exists($path . '/main.py')) {
-                    $this->projectRoot = $path;
-                    \Log::info("SetupWizard: Found project root at: {$path}");
-                    break;
-                }
+        // اولویت سوم: جستجو در مسیرهای ممکن
+        $possiblePaths = [
+            '/var/www/meowvpnbot',  // مسیر استاندارد (دوباره چک می‌شود برای اطمینان)
+            dirname($basePath),      // یک سطح بالا از base_path
+            base_path('..'),         // یک سطح بالا (relative)
+            realpath(base_path('..')), // یک سطح بالا (absolute)
+        ];
+
+        // اضافه کردن مسیرهای خاص توسعه (فقط برای محیط توسعه)
+        if (strpos($basePath, '/mnt/') !== false || strpos($basePath, '/home/') !== false) {
+            $possiblePaths[] = dirname($basePath);
+            // اگر در پوشه site هستیم، یک سطح بالاتر
+            if (basename($basePath) === 'site') {
+                $possiblePaths[] = dirname($basePath);
             }
         }
 
-        // اگر هنوز پیدا نشد، خطا بده
-        if (!is_dir($this->projectRoot)) {
+        foreach ($possiblePaths as $path) {
+            if ($path && is_dir($path) && file_exists($path . '/main.py')) {
+                $this->projectRoot = $path;
+                \Log::info("SetupWizard: Found project root at: {$path}");
+                return;
+            }
+        }
+
+        // اگر هنوز پیدا نشد، استفاده از مسیر استاندارد به عنوان fallback
+        // حتی اگر فایل main.py وجود نداشته باشد (برای نصب اولیه)
+        if (is_dir($standardPath)) {
+            $this->projectRoot = $standardPath;
+            \Log::warning("SetupWizard: Using standard path as fallback (main.py may not exist yet): {$standardPath}");
+        } else {
             \Log::warning("SetupWizard: مسیر پروژه یافت نشد. base_path: {$basePath}, projectRoot: {$this->projectRoot}");
         }
     }
@@ -392,6 +417,11 @@ class SetupWizardController extends Controller
             $this->createBotEnv($step1, $step2, $step3);
             \Log::info('Setup Wizard: Bot .env file created');
 
+            \Log::info('Setup Wizard: Updating Laravel .env with bot database path');
+            // 1.5. به‌روزرسانی Laravel .env با مسیر دیتابیس ربات
+            $this->updateLaravelEnvWithBotDatabasePath();
+            \Log::info('Setup Wizard: Laravel .env updated');
+
             \Log::info('Setup Wizard: Installing bot dependencies');
             // 2. نصب dependencies ربات
             $this->installBotDependencies();
@@ -401,6 +431,12 @@ class SetupWizardController extends Controller
             // 3. اجرای migrations
             $this->runMigrations();
             \Log::info('Setup Wizard: Migrations completed');
+
+            // تنظیم مجوزهای دیتابیس پس از migrations
+            $dbPath = $this->projectRoot . '/vpn_bot.db';
+            if (file_exists($dbPath)) {
+                $this->setDatabasePermissions($dbPath);
+            }
 
             \Log::info('Setup Wizard: Saving panel to database');
             // 4. ثبت پنل در دیتابیس
@@ -640,6 +676,72 @@ class SetupWizardController extends Controller
     }
 
     /**
+     * به‌روزرسانی Laravel .env با مسیر دیتابیس ربات
+     */
+    private function updateLaravelEnvWithBotDatabasePath()
+    {
+        $laravelEnvPath = base_path('.env');
+        $botDbPath = str_replace('\\', '/', $this->projectRoot . '/vpn_bot.db');
+
+        // بررسی وجود فایل .env Laravel
+        if (!file_exists($laravelEnvPath)) {
+            \Log::warning('Setup Wizard: Laravel .env file not found, skipping BOT_DATABASE_PATH update');
+            return;
+        }
+
+        // خواندن محتوای فایل
+        $envContent = file_get_contents($laravelEnvPath);
+        if ($envContent === false) {
+            \Log::warning('Setup Wizard: Failed to read Laravel .env file');
+            return;
+        }
+
+        // بررسی وجود BOT_DATABASE_PATH
+        if (preg_match('/^BOT_DATABASE_PATH=.*$/m', $envContent)) {
+            // به‌روزرسانی مقدار موجود
+            $envContent = preg_replace(
+                '/^BOT_DATABASE_PATH=.*$/m',
+                'BOT_DATABASE_PATH=' . $botDbPath,
+                $envContent
+            );
+        } else {
+            // اضافه کردن BOT_DATABASE_PATH اگر وجود نداشت
+            // اضافه کردن بعد از خط خالی یا در انتهای فایل
+            if (substr(trim($envContent), -1) !== "\n") {
+                $envContent .= "\n";
+            }
+            $envContent .= "\n# Bot Database Path (برای دسترسی Laravel به دیتابیس ربات)\n";
+            $envContent .= "BOT_DATABASE_PATH={$botDbPath}\n";
+        }
+
+        // نوشتن فایل
+        $result = @file_put_contents($laravelEnvPath, $envContent);
+        if ($result === false) {
+            // اگر نوشتن با خطا مواجه شد، با sudo امتحان کن
+            $tempFile = sys_get_temp_dir() . '/laravel_env_' . uniqid();
+            if (file_put_contents($tempFile, $envContent) !== false) {
+                $tempFileEscaped = escapeshellarg($tempFile);
+                $envPathEscaped = escapeshellarg($laravelEnvPath);
+                exec("sudo mv {$tempFileEscaped} {$envPathEscaped} 2>&1", $output, $returnCode);
+                if ($returnCode !== 0) {
+                    \Log::warning('Setup Wizard: Failed to update Laravel .env with BOT_DATABASE_PATH', [
+                        'error' => implode(' ', $output)
+                    ]);
+                }
+            } else {
+                \Log::warning('Setup Wizard: Failed to write Laravel .env file');
+            }
+        }
+
+        // پاک کردن کش Laravel برای اعمال تغییرات
+        try {
+            Artisan::call('config:clear');
+        } catch (\Exception $e) {
+            \Log::warning('Setup Wizard: Failed to clear Laravel config cache', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * نصب dependencies ربات
      */
     private function installBotDependencies()
@@ -753,6 +855,35 @@ class SetupWizardController extends Controller
             'username' => $panelData['panel_username'],
             'password' => $panelData['panel_password'],
         ]);
+
+        // تنظیم مجوزهای دیتابیس برای دسترسی Laravel
+        $this->setDatabasePermissions($dbPath);
+    }
+
+    /**
+     * تنظیم مجوزهای دیتابیس برای دسترسی Laravel
+     */
+    private function setDatabasePermissions($dbPath)
+    {
+        if (!file_exists($dbPath)) {
+            return;
+        }
+
+        // تعیین کاربر وب سرور
+        $webUser = 'www-data';
+        if (!posix_getpwnam($webUser)) {
+            $webUser = 'nginx';
+        }
+
+        // تنظیم مالکیت و مجوزها
+        $dbPathEscaped = escapeshellarg($dbPath);
+        $output = shell_exec("sudo chown {$webUser}:{$webUser} {$dbPathEscaped} 2>&1");
+        $output = shell_exec("sudo chmod 664 {$dbPathEscaped} 2>&1");
+
+        \Log::info('Setup Wizard: Database permissions set', [
+            'path' => $dbPath,
+            'user' => $webUser
+        ]);
     }
 
     /**
@@ -767,6 +898,7 @@ class SetupWizardController extends Controller
             throw new \Exception('دیتابیس یافت نشد! لطفاً ابتدا migrations را اجرا کنید.');
         }
 
+        // استفاده از PDO مستقیم در Setup Wizard (قبل از تنظیم env variables)
         $pdo = new \PDO("sqlite:$dbPath");
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
@@ -786,6 +918,9 @@ class SetupWizardController extends Controller
 
             $stmt->execute(['key' => $key, 'value' => $value]);
         }
+
+        // تنظیم مجوزهای دیتابیس پس از ذخیره تنظیمات
+        $this->setDatabasePermissions($dbPath);
     }
 
     /**

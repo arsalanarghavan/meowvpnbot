@@ -1,334 +1,159 @@
-@extends('layouts.rtl.master')
+@extends('layouts.app.dashboard')
 @section('title', 'داشبورد')
 
-@section('css')
-<link rel="stylesheet" type="text/css" href="{{asset('assets/css/chartist.css')}}">
-<link rel="stylesheet" type="text/css" href="{{asset('assets/css/date-picker.css')}}">
-@endsection
-
-@section('style')
-@endsection
-
-@section('breadcrumb-title')
-	<h2>داشبورد <span>مدیریت </span></h2>
-@endsection
-
-@section('breadcrumb-items')
-    <li class="breadcrumb-item active">داشبورد</li>
-@endsection
-
 @section('content')
-<div class="container-fluid">
-    <div class="row">
+<div class="space-y-6">
+    <div>
+        <h1 class="text-3xl font-bold tracking-tight">داشبورد</h1>
+        <p class="text-muted-foreground">خلاصه آمار و اطلاعات سیستم</p>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <!-- آمار کاربران -->
-        <div class="col-xl-3 col-sm-6">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-2">کل کاربران</h6>
-                            <h4 class="mb-0">{{ number_format($stats['users']['total']) }}</h4>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <div class="avatar-sm rounded-circle bg-primary align-self-center mini-stat-icon">
-                                <span class="avatar-title rounded-circle bg-primary">
-                                    <i class="fa fa-users font-primary"></i>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-muted mt-3 mb-0">
-                        <span class="badge badge-success mr-1">{{ number_format($stats['users']['active']) }}</span>
-                        <span class="text-muted">فعال</span>
-                        <span class="badge badge-danger mr-1 ml-2">{{ number_format($stats['users']['blocked']) }}</span>
-                        <span class="text-muted">مسدود</span>
-                    </p>
-                </div>
-            </div>
-        </div>
+        <Card>
+            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">کل کاربران</CardTitle>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="h-4 w-4 text-muted-foreground">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            </CardHeader>
+            <CardContent>
+                <div class="text-2xl font-bold">{{ number_format($stats['users']['total']) }}</div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    <Badge variant="secondary" class="mr-1">{{ number_format($stats['users']['active']) }} فعال</Badge>
+                    <Badge variant="destructive">{{ number_format($stats['users']['blocked']) }} مسدود</Badge>
+                </p>
+            </CardContent>
+        </Card>
 
         <!-- آمار سرویس‌ها -->
-        <div class="col-xl-3 col-sm-6">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-2">کل سرویس‌ها</h6>
-                            <h4 class="mb-0">{{ number_format($stats['services']['total']) }}</h4>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <div class="avatar-sm rounded-circle bg-success align-self-center mini-stat-icon">
-                                <span class="avatar-title rounded-circle bg-success">
-                                    <i class="fa fa-server font-success"></i>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-muted mt-3 mb-0">
-                        <span class="badge badge-success mr-1">{{ number_format($stats['services']['active']) }}</span>
-                        <span class="text-muted">فعال</span>
-                        <span class="badge badge-warning mr-1 ml-2">{{ number_format($stats['services']['expiring']) }}</span>
-                        <span class="text-muted">در حال انقضا</span>
-                    </p>
-                </div>
-            </div>
-        </div>
+        <Card>
+            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">کل سرویس‌ها</CardTitle>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="h-4 w-4 text-muted-foreground">
+                    <rect width="20" height="14" x="2" y="5" rx="2"></rect>
+                    <path d="M2 10h20"></path>
+                </svg>
+            </CardHeader>
+            <CardContent>
+                <div class="text-2xl font-bold">{{ number_format($stats['services']['total']) }}</div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    <Badge variant="secondary" class="mr-1">{{ number_format($stats['services']['active']) }} فعال</Badge>
+                    <Badge variant="outline">{{ number_format($stats['services']['expiring']) }} در حال انقضا</Badge>
+                </p>
+            </CardContent>
+        </Card>
 
         <!-- آمار درآمد -->
-        <div class="col-xl-3 col-sm-6">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-2">درآمد کل</h6>
-                            <h4 class="mb-0">{{ number_format($stats['revenue']['total']) }} تومان</h4>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <div class="avatar-sm rounded-circle bg-info align-self-center mini-stat-icon">
-                                <span class="avatar-title rounded-circle bg-info">
-                                    <i class="fa fa-money font-info"></i>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-muted mt-3 mb-0">
-                        <span class="text-muted">۳۰ روز اخیر:</span>
-                        <span class="badge badge-info mr-1">{{ number_format($stats['revenue']['monthly']) }}</span>
-                        <span class="text-muted">تومان</span>
-                    </p>
-                </div>
-            </div>
-        </div>
+        <Card>
+            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">درآمد کل</CardTitle>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="h-4 w-4 text-muted-foreground">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+            </CardHeader>
+            <CardContent>
+                <div class="text-2xl font-bold">{{ number_format($stats['revenue']['total']) }} تومان</div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    ۳۰ روز اخیر: {{ number_format($stats['revenue']['monthly']) }} تومان
+                </p>
+            </CardContent>
+        </Card>
 
-        <!-- آمار بازاریاب‌ها -->
-        <div class="col-xl-3 col-sm-6">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-2">بازاریاب‌ها</h6>
-                            <h4 class="mb-0">{{ number_format($stats['users']['marketers']) }}</h4>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <div class="avatar-sm rounded-circle bg-warning align-self-center mini-stat-icon">
-                                <span class="avatar-title rounded-circle bg-warning">
-                                    <i class="fa fa-bullhorn font-warning"></i>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-muted mt-3 mb-0">
-                        <span class="text-muted">کمیسیون پرداخت نشده:</span>
-                        <span class="badge badge-warning mr-1">{{ number_format($stats['commissions']['unpaid']) }}</span>
-                    </p>
-                </div>
-            </div>
-        </div>
+        <!-- آمار تراکنش‌ها -->
+        <Card>
+            <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle class="text-sm font-medium">تراکنش‌های امروز</CardTitle>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="h-4 w-4 text-muted-foreground">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+            </CardHeader>
+            <CardContent>
+                <div class="text-2xl font-bold">{{ number_format($stats['transactions']['today']) }}</div>
+                <p class="text-xs text-muted-foreground mt-1">
+                    <Badge variant="outline" class="mr-1">{{ number_format($stats['revenue']['pending']) }} در انتظار</Badge>
+                </p>
+            </CardContent>
+        </Card>
     </div>
 
-    <div class="row">
-        <!-- آمار اضافی -->
-        <div class="col-xl-4 col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>آمار پلن‌ها و پنل‌ها</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            کل پلن‌ها
-                            <span class="badge badge-primary badge-pill">{{ number_format($stats['plans']['total']) }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            کل پنل‌ها
-                            <span class="badge badge-success badge-pill">{{ number_format($stats['panels']['total']) }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            پنل‌های فعال
-                            <span class="badge badge-success badge-pill">{{ number_format($stats['panels']['active']) }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            تراکنش‌های در انتظار
-                            <span class="badge badge-warning badge-pill">{{ number_format($stats['revenue']['pending']) }}</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
+    <!-- جداول و اطلاعات بیشتر -->
+    <div class="grid gap-4 md:grid-cols-2">
+        <Card>
+            <CardHeader>
+                <CardTitle>آخرین کاربران</CardTitle>
+                <CardDescription>کاربران جدید ثبت‌نام شده</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>نام کاربری</TableHead>
+                            <TableHead>نقش</TableHead>
+                            <TableHead>تاریخ ثبت</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        @forelse($stats['latestUsers'] ?? [] as $user)
+                        <TableRow>
+                            <TableCell>{{ $user['user_id'] }}</TableCell>
+                            <TableCell>
+                                <Badge>{{ $user['role'] }}</Badge>
+                            </TableCell>
+                            <TableCell>{{ \Carbon\Carbon::parse($user['created_at'])->format('Y/m/d') }}</TableCell>
+                        </TableRow>
+                        @empty
+                        <TableRow>
+                            <TableCell colspan="3" class="text-center text-muted-foreground">هیچ کاربری یافت نشد</TableCell>
+                        </TableRow>
+                        @endforelse
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
 
-        <!-- آمار کارت‌های هدیه -->
-        <div class="col-xl-4 col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>کارت‌های هدیه</h5>
-                </div>
-                <div class="card-body">
-                    <ul class="list-group">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            کل کارت‌ها
-                            <span class="badge badge-primary badge-pill">{{ number_format($stats['giftCards']['total']) }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            استفاده شده
-                            <span class="badge badge-success badge-pill">{{ number_format($stats['giftCards']['used']) }}</span>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            استفاده نشده
-                            <span class="badge badge-info badge-pill">{{ number_format($stats['giftCards']['unused']) }}</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- نمودار درآمد -->
-        <div class="col-xl-4 col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>درآمد ۳۰ روز اخیر</h5>
-                </div>
-                <div class="card-body">
-                    <canvas id="revenueChart" height="200"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <!-- آخرین کاربران -->
-        <div class="col-xl-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>آخرین کاربران</h5>
-                    <a href="{{ route('users.index') }}" class="btn btn-sm btn-primary">مشاهده همه</a>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>شناسه</th>
-                                    <th>نقش</th>
-                                    <th>موجودی</th>
-                                    <th>تاریخ عضویت</th>
-                                    <th>وضعیت</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($stats['latestUsers'] as $user)
-                                <tr>
-                                    <td><a href="{{ route('users.show', $user['user_id']) }}">{{ $user['user_id'] }}</a></td>
-                                    <td>
-                                        @if($user['role'] == 'customer')
-                                            <span class="badge badge-info">مشتری</span>
-                                        @elseif($user['role'] == 'marketer')
-                                            <span class="badge badge-warning">بازاریاب</span>
-                                        @else
-                                            <span class="badge badge-danger">ادمین</span>
-                                        @endif
-                                    </td>
-                                    <td>{{ number_format($user['wallet_balance']) }} تومان</td>
-                                    <td>{{ \Carbon\Carbon::parse($user['created_at'])->format('Y/m/d') }}</td>
-                                    <td>
-                                        @if($user['is_active'])
-                                            <span class="badge badge-success">فعال</span>
-                                        @else
-                                            <span class="badge badge-danger">مسدود</span>
-                                        @endif
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- آخرین تراکنش‌ها -->
-        <div class="col-xl-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>آخرین تراکنش‌ها</h5>
-                    <a href="{{ route('transactions.index') }}" class="btn btn-sm btn-primary">مشاهده همه</a>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>کاربر</th>
-                                    <th>مبلغ</th>
-                                    <th>نوع</th>
-                                    <th>وضعیت</th>
-                                    <th>تاریخ</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($stats['latestTransactions'] as $transaction)
-                                <tr>
-                                    <td><a href="{{ route('users.show', $transaction['user_id']) }}">{{ $transaction['user_id'] }}</a></td>
-                                    <td>{{ number_format($transaction['amount']) }} تومان</td>
-                                    <td><span class="badge badge-info">{{ $transaction['type'] }}</span></td>
-                                    <td>
-                                        @if($transaction['status'] == 'موفق')
-                                            <span class="badge badge-success">موفق</span>
-                                        @elseif($transaction['status'] == 'در انتظار')
-                                            <span class="badge badge-warning">در انتظار</span>
-                                        @else
-                                            <span class="badge badge-danger">ناموفق</span>
-                                        @endif
-                                    </td>
-                                    <td>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('Y/m/d H:i') }}</td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <Card>
+            <CardHeader>
+                <CardTitle>آخرین تراکنش‌ها</CardTitle>
+                <CardDescription>تراکنش‌های اخیر سیستم</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>مبلغ</TableHead>
+                            <TableHead>وضعیت</TableHead>
+                            <TableHead>تاریخ</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        @forelse($stats['latestTransactions'] ?? [] as $transaction)
+                        <TableRow>
+                            <TableCell>{{ number_format($transaction['amount']) }} تومان</TableCell>
+                            <TableCell>
+                                @php
+                                    $variant = \App\Helpers\StatusHelper::getTransactionStatusVariant($transaction['status']);
+                                    $label = \App\Helpers\StatusHelper::getTransactionStatusLabel($transaction['status']);
+                                @endphp
+                                <Badge :variant="$variant">
+                                    {{ $label }}
+                                </Badge>
+                            </TableCell>
+                            <TableCell>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('Y/m/d') }}</TableCell>
+                        </TableRow>
+                        @empty
+                        <TableRow>
+                            <TableCell colspan="3" class="text-center text-muted-foreground">هیچ تراکنشی یافت نشد</TableCell>
+                        </TableRow>
+                        @endforelse
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
     </div>
 </div>
 @endsection
 
-@section('script')
-<script src="{{asset('assets/js/chart/chartjs/chart.min.js')}}"></script>
-<script>
-    // نمودار درآمد
-    var ctx = document.getElementById('revenueChart').getContext('2d');
-    var revenueData = @json($stats['revenueChart']);
-    
-    var labels = revenueData.map(function(item) {
-        return item.date;
-    });
-    
-    var data = revenueData.map(function(item) {
-        return item.total;
-    });
-    
-    var myChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'درآمد (تومان)',
-                data: data,
-                backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 2,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-</script>
-@endsection

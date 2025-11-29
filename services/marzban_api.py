@@ -19,7 +19,14 @@ class MarzbanAPI:
         self.username = panel.username
         self.password = panel.password
         # Set verify=True for security against MITM attacks.
-        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=20.0, verify=True)
+        # Increased timeout for slow connections
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url, 
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            verify=True,
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
         self.access_token = None
 
     async def _login(self):
@@ -34,11 +41,17 @@ class MarzbanAPI:
             response.raise_for_status()
             self.access_token = response.json()["access_token"]
             self.client.headers["Authorization"] = f"Bearer {self.access_token}"
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout while logging into Marzban panel {self.base_url}: {e}")
+            raise ConnectionError(f"Connection timeout to panel {self.base_url}") from e
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error to Marzban panel {self.base_url}: {e}")
+            raise ConnectionError(f"Cannot connect to panel {self.base_url}") from e
         except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to log into Marzban panel {self.base_url}: {e.response.text}")
+            logger.error(f"HTTP {e.response.status_code} error logging into Marzban panel {self.base_url}: {e.response.text}")
             raise
         except Exception as e:
-            logger.error(f"An unexpected error occurred during login to {self.base_url}: {e}")
+            logger.error(f"An unexpected error occurred during login to {self.base_url}: {e}", exc_info=True)
             raise
 
     async def create_user(self, plan: Plan, username: str) -> Dict[str, Any]:

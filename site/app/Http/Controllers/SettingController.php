@@ -6,26 +6,21 @@ use Illuminate\Http\Request;
 
 class SettingController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش صفحه تنظیمات
      */
     public function index()
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // خواندن تنظیمات
-        $settings = $pdo->query("SELECT * FROM settings")->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT * FROM settings");
+        $stmt->execute();
+        $settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // تبدیل به آرایه key => value
         $settingsArray = [];
@@ -41,12 +36,12 @@ class SettingController extends Controller
      */
     public function update(Request $request)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // لیست کلیدهای تنظیمات قابل ویرایش
             $allowedKeys = [
@@ -97,12 +92,12 @@ class SettingController extends Controller
      */
     public function getSetting($key)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("SELECT value FROM settings WHERE key = :key");
             $stmt->execute(['key' => $key]);
@@ -120,12 +115,12 @@ class SettingController extends Controller
      */
     public function setSetting(Request $request, $key)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             $value = $request->input('value');
             
             // بررسی وجود کلید
@@ -145,6 +140,34 @@ class SettingController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست تنظیمات به صورت JSON (API)
+     */
+    public function apiIndex()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM settings");
+            $stmt->execute();
+            $settings = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            // تبدیل به آرایه key => value
+            $settingsArray = [];
+            foreach ($settings as $setting) {
+                $settingsArray[$setting['key']] = $setting['value'];
+            }
+            
+            return response()->json(['success' => true, 'data' => $settingsArray]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

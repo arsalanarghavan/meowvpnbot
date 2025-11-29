@@ -152,13 +152,29 @@ async def select_field_to_edit(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def receive_new_plan_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives the new value and updates the plan in the database."""
-    new_value = update.message.text
+    from bot.utils.validators import validate_positive_integer, validate_text_length, sanitize_text
+    
     field = context.user_data.get('field_to_edit')
     plan_id = context.user_data.get('plan_to_manage_id')
 
     if not field or not plan_id:
         await update.message.reply_text(_('messages.error_general'))
         return ConversationHandler.END
+    
+    # Validate based on field type
+    if field in ['duration_days', 'traffic_gb', 'price', 'device_limit']:
+        text_input = sanitize_text(update.message.text, max_length=20)
+        new_value = validate_positive_integer(text_input, min_value=1 if field != 'traffic_gb' else 0)
+        if new_value is None:
+            await update.message.reply_text(_('messages.error_invalid_number'))
+            return AWAITING_NEW_PLAN_VALUE
+    elif field == 'name':
+        new_value = validate_text_length(update.message.text, min_length=1, max_length=100)
+        if new_value is None:
+            await update.message.reply_text(_('messages.error_invalid_text'))
+            return AWAITING_NEW_PLAN_VALUE
+    else:
+        new_value = sanitize_text(update.message.text, max_length=200)
         
     update_data = {field: new_value}
 

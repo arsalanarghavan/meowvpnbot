@@ -5,6 +5,67 @@ from typing import List, Optional
 # از پوشه اصلی پروژه، فایل .env را بارگذاری می‌کند
 load_dotenv()
 
+def validate_config():
+    """Validates required environment variables at startup."""
+    errors = []
+    warnings = []
+    
+    # Required variables
+    required_vars = {
+        "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
+        "DATABASE_URL": os.getenv("DATABASE_URL"),
+    }
+    
+    for var_name, var_value in required_vars.items():
+        if not var_value or var_value in ["your_bot_token_here", "your_database_url"]:
+            errors.append(f"{var_name} is not set or has default value")
+    
+    # Validate DATABASE_URL format
+    db_url = required_vars["DATABASE_URL"]
+    if db_url:
+        if not db_url.startswith(("sqlite:///", "postgresql://", "mysql://")):
+            errors.append("DATABASE_URL must start with sqlite:///, postgresql://, or mysql://")
+        # Check for credentials in URL (security warning)
+        if "://" in db_url and "@" in db_url:
+            if "password" in db_url.lower() or "pass" in db_url.lower():
+                # Password should be in URL, but warn if it's too simple
+                pass
+    
+    # Validate BOT_TOKEN format (Telegram bot tokens have format: numbers:letters)
+    bot_token = required_vars.get("TELEGRAM_BOT_TOKEN")
+    if bot_token and bot_token != "your_bot_token_here":
+        if ":" not in bot_token or len(bot_token) < 30:
+            errors.append("TELEGRAM_BOT_TOKEN format appears invalid")
+    
+    # Check optional but recommended variables
+    if not os.getenv("ADMIN_ID"):
+        warnings.append("ADMIN_ID is not set - admin commands will not work")
+    
+    if not os.getenv("ZARINPAL_MERCHANT_ID"):
+        warnings.append("ZARINPAL_MERCHANT_ID is not set - online payments will not work")
+    
+    # Security checks
+    if os.getenv("LOG_CHANNEL_ID"):
+        try:
+            log_channel = int(os.getenv("LOG_CHANNEL_ID"))
+            if log_channel > 0:
+                warnings.append("LOG_CHANNEL_ID should be negative for channels")
+        except (ValueError, TypeError):
+            warnings.append("LOG_CHANNEL_ID format may be invalid")
+    
+    if errors:
+        error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+        if warnings:
+            error_msg += "\n\nWarnings:\n" + "\n".join(f"  - {w}" for w in warnings)
+        raise ValueError(error_msg)
+    
+    if warnings:
+        import warnings as py_warnings
+        for warning in warnings:
+            py_warnings.warn(warning, UserWarning)
+    
+    return True
+
 # --- Telegram Bot Configuration ---
 # توکن ربات تلگرام که به صورت رشته خوانده می‌شود
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")

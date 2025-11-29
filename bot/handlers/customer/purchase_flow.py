@@ -122,6 +122,9 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
     
     db = SessionLocal()
     try:
+        # Start transaction
+        db.begin()
+        
         db_user = user_queries.find_or_create_user(db, user.id)
 
         if db_user.wallet_balance < plan.price:
@@ -173,12 +176,16 @@ async def process_wallet_payment(update: Update, context: ContextTypes.DEFAULT_T
 
         combined_sub_link = await MarzbanAPI.get_combined_subscription_link(user_details_list)
 
+        # All database operations in a single transaction
         user_queries.update_wallet_balance(db, user.id, -plan.price)
         tx = transaction_queries.create_transaction(db, user.id, plan.price, TransactionType.SERVICE_PURCHASE, plan.id)
         transaction_queries.update_transaction_status(db, tx.id, TransactionStatus.COMPLETED)
         service_queries.create_service_record(db, user.id, plan, service_username)
 
         award_commission_for_purchase(db, tx)
+
+        # Commit transaction
+        db.commit()
 
         await query.edit_message_text(_('messages.purchase_successful', sub_link=combined_sub_link))
 

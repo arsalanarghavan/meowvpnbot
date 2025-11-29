@@ -13,7 +13,19 @@ if not DATABASE_URL or DATABASE_URL == "your_database_url":
 
 # ایجاد موتور اصلی SQLAlchemy با استفاده از آدرس اتصال
 # pool_pre_ping=True به موتور دستور می‌دهد که قبل از هر عملیات، اتصال به دیتابیس را چک کند تا از قطعی جلوگیری شود
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+# pool_size: تعداد اتصالات همزمان در pool
+# max_overflow: حداکثر اتصالات اضافی که می‌تواند ایجاد شود
+# pool_timeout: زمان انتظار برای دریافت اتصال از pool (ثانیه)
+# pool_recycle: زمان بازسازی اتصالات (ثانیه) - برای جلوگیری از timeout
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=3600,  # 1 hour
+    echo=False  # Set to True for SQL query logging in development
+)
 
 # ایجاد یک کلاس SessionLocal که هر نمونه از آن یک جلسه دیتابیس جدید خواهد بود
 # autocommit=False و autoflush=False تنظیمات استاندارد برای کنترل دستی تراکنش‌ها هستند

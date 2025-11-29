@@ -101,7 +101,7 @@ async def check_services_for_notifications(context: ContextTypes.DEFAULT_TYPE):
 
 async def reset_card_daily_amounts(context: ContextTypes.DEFAULT_TYPE):
     """Job to reset daily amounts for all card accounts at midnight."""
-    from database.models.queries import card_queries
+    from database.queries import card_queries
     
     logger.info("Running card accounts daily reset job...")
     db = SessionLocal()

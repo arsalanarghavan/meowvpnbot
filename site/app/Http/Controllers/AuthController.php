@@ -43,17 +43,29 @@ class AuthController extends Controller
             ])->withInput($request->only('username'));
         }
 
-        // بررسی ادمین - اگر password hash شده باشد، از password_verify استفاده کن
+        // بررسی ادمین - فقط password hash شده را قبول می‌کنیم
         $isPasswordValid = false;
-        if (password_needs_rehash($adminPassword, PASSWORD_DEFAULT) === false && password_verify($password, $adminPassword)) {
+        if (password_verify($password, $adminPassword)) {
             // Password hash شده و معتبر است
             $isPasswordValid = true;
-        } elseif ($username === $adminUsername && $password === $adminPassword) {
-            // برای backward compatibility - اگر password plain text باشد
-            $isPasswordValid = true;
+            
+            // اگر password نیاز به rehash دارد، آن را به‌روزرسانی کن
+            if (password_needs_rehash($adminPassword, PASSWORD_DEFAULT)) {
+                $newHash = password_hash($password, PASSWORD_DEFAULT);
+                // به‌روزرسانی در .env (اختیاری - می‌توانید از دیتابیس استفاده کنید)
+                // این بخش را می‌توانید در صورت نیاز پیاده‌سازی کنید
+            }
         }
         
         if ($username === $adminUsername && $isPasswordValid) {
+            // Log successful login
+            \Log::info('AUDIT: Login SUCCESS', [
+                'username' => $username,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'timestamp' => now()->toIso8601String()
+            ]);
+            
             session([
                 'user_authenticated' => true,
                 'user_role' => 'admin',
@@ -69,14 +81,16 @@ class AuthController extends Controller
         }
 
         // چک کردن بازاریاب‌های دیتابیس (اختیاری - برای آینده)
-        $dbPath = base_path('../vpn_bot.db');
-        if (file_exists($dbPath)) {
+        if ($this->botDatabaseExists()) {
             try {
-                $pdo = new \PDO("sqlite:$dbPath");
+                $pdo = $this->getBotConnection();
 
+                // Sanitize username for use in key (only alphanumeric and underscore)
+                $sanitizedUsername = preg_replace('/[^a-zA-Z0-9_]/', '', $username);
+                
                 // چک کردن در جدول settings برای بازاریاب‌های اضافی
                 $stmt = $pdo->prepare("SELECT value FROM settings WHERE key = :key");
-                $stmt->execute(['key' => 'marketer_' . $username]);
+                $stmt->execute(['key' => 'marketer_' . $sanitizedUsername]);
                 $storedPassword = $stmt->fetchColumn();
 
                 if ($storedPassword && password_verify($password, $storedPassword)) {
@@ -93,6 +107,14 @@ class AuthController extends Controller
             }
         }
 
+        // Log failed login attempt
+        \Log::warning('AUDIT: Login FAILED', [
+            'username' => $username,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'timestamp' => now()->toIso8601String()
+        ]);
+        
         // اگر اطلاعات نادرست بود
         return back()->withErrors([
             'username' => 'نام کاربری یا رمز عبور اشتباه است.',

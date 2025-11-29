@@ -71,7 +71,7 @@ Route::get('/', function () {
 
 // صفحات احراز هویت
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle.login:5,15')->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // تمام صفحات محافظت شده با middleware
@@ -160,16 +160,6 @@ Route::prefix('settings')->group(function () {
     Route::post('/set/{key}', [SettingController::class, 'setSetting'])->name('settings.set');
 });
 
-// استارتر کیت (نمونه‌های قالب)
-Route::prefix('starterkit')->group(function () {
-Route::view('layout-light', 'starterkit.layout-light')->name('layout-light');
-Route::view('layout-dark', 'starterkit.layout-dark')->name('layout-dark');
-Route::view('sidebar-fixed', 'starterkit.sidebar-fixed')->name('sidebar-fixed');
-Route::view('boxed', 'starterkit.boxed')->name('boxed');
-Route::view('layout-rtl', 'starterkit.layout-rtl')->name('layout-rtl');
-Route::view('vertical', 'starterkit.vertical')->name('vertical');
-Route::view('mega-menu', 'starterkit.mega-menu')->name('mega-menu');
-});
 
 // پاک‌سازی کش (فقط برای ادمین)
 Route::get('/clear-cache', function() {

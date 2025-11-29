@@ -6,25 +6,20 @@ use Illuminate\Http\Request;
 
 class CardAccountController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست کارت‌های بانکی
      */
     public function index()
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
-        $cards = $pdo->query("SELECT * FROM card_accounts ORDER BY priority ASC, id DESC")->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT * FROM card_accounts ORDER BY priority ASC, id DESC");
+        $stmt->execute();
+        $cards = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار
         $stats = [
@@ -58,12 +53,12 @@ class CardAccountController extends Controller
             'note' => 'nullable|max:200',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // بررسی تکراری نبودن شماره کارت
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM card_accounts WHERE card_number = :card_number");
@@ -97,11 +92,11 @@ class CardAccountController extends Controller
      */
     public function edit($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         $stmt = $pdo->prepare("SELECT * FROM card_accounts WHERE id = :id");
         $stmt->execute(['id' => $id]);
@@ -127,12 +122,12 @@ class CardAccountController extends Controller
             'note' => 'nullable|max:200',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // بررسی تکراری نبودن شماره کارت (به جز همین کارت)
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM card_accounts WHERE card_number = :card_number AND id != :id");
@@ -172,12 +167,12 @@ class CardAccountController extends Controller
      */
     public function toggleStatus($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE card_accounts 
@@ -198,12 +193,12 @@ class CardAccountController extends Controller
      */
     public function resetDailyAmount($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE card_accounts 
@@ -224,12 +219,12 @@ class CardAccountController extends Controller
      */
     public function destroy($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("DELETE FROM card_accounts WHERE id = :id");
             $stmt->execute(['id' => $id]);
@@ -238,6 +233,54 @@ class CardAccountController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست کارت‌های بانکی به صورت JSON (API)
+     */
+    public function apiIndex()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM card_accounts ORDER BY priority ASC, id DESC");
+            $stmt->execute();
+            $cards = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            return response()->json(['success' => true, 'data' => $cards]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات کارت بانکی به صورت JSON (API)
+     */
+    public function apiShow($id)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM card_accounts WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $card = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$card) {
+                return response()->json(['success' => false, 'message' => 'کارت بانکی یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $card]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

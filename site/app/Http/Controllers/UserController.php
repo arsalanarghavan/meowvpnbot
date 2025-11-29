@@ -7,23 +7,16 @@ use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست کاربران
      */
     public function index(Request $request)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // فیلترها
         $search = $request->get('search');
@@ -56,13 +49,23 @@ class UserController extends Controller
         $users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار کلی
-        $stats = [
-            'total' => $pdo->query("SELECT COUNT(*) FROM users")->fetchColumn(),
-            'active' => $pdo->query("SELECT COUNT(*) FROM users WHERE is_active = 1")->fetchColumn(),
-            'customers' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'customer'")->fetchColumn(),
-            'marketers' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'marketer'")->fetchColumn(),
-            'admins' => $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn(),
-        ];
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users");
+        $stmt->execute();
+        $stats['total'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE is_active = 1");
+        $stmt->execute();
+        $stats['active'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = :role");
+        $stmt->execute(['role' => 'customer']);
+        $stats['customers'] = $stmt->fetchColumn();
+        
+        $stmt->execute(['role' => 'marketer']);
+        $stats['marketers'] = $stmt->fetchColumn();
+        
+        $stmt->execute(['role' => 'admin']);
+        $stats['admins'] = $stmt->fetchColumn();
         
         return view('users.index', compact('users', 'stats'));
     }
@@ -72,11 +75,11 @@ class UserController extends Controller
      */
     public function show($userId)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // اطلاعات کاربر
         $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = :user_id");
@@ -142,11 +145,11 @@ class UserController extends Controller
      */
     public function update(Request $request, $userId)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         $action = $request->input('action');
         
@@ -196,12 +199,12 @@ class UserController extends Controller
      */
     public function destroy($userId)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // حذف کاربر (در صورت نیاز می‌توان سرویس‌ها را هم حذف کرد)
             $stmt = $pdo->prepare("DELETE FROM users WHERE user_id = :user_id");
@@ -211,6 +214,69 @@ class UserController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست کاربران به صورت JSON (API)
+     */
+    public function apiIndex(Request $request)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $query = "SELECT * FROM users WHERE 1=1";
+            $params = [];
+            
+            if ($request->has('role')) {
+                $query .= " AND role = :role";
+                $params['role'] = $request->get('role');
+            }
+            
+            if ($request->has('search')) {
+                $query .= " AND user_id LIKE :search";
+                $params['search'] = "%" . $request->get('search') . "%";
+            }
+            
+            $query .= " ORDER BY created_at DESC LIMIT 100";
+            
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
+            $users = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            return response()->json(['success' => true, 'data' => $users]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات کاربر به صورت JSON (API)
+     */
+    public function apiShow($userId)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = :user_id");
+            $stmt->execute(['user_id' => $userId]);
+            $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'کاربر یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $user]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

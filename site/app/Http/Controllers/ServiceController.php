@@ -7,23 +7,16 @@ use Illuminate\Support\Facades\DB;
 
 class ServiceController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست سرویس‌ها
      */
     public function index(Request $request)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // فیلترها
         $search = $request->get('search');
@@ -63,20 +56,31 @@ class ServiceController extends Controller
         $services = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // لیست پلن‌ها برای فیلتر
-        $plans = $pdo->query("SELECT id, name, category FROM plans ORDER BY name")->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT id, name, category FROM plans ORDER BY name");
+        $stmt->execute();
+        $plans = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار
-        $stats = [
-            'total' => $pdo->query("SELECT COUNT(*) FROM services")->fetchColumn(),
-            'active' => $pdo->query("SELECT COUNT(*) FROM services WHERE is_active = 1")->fetchColumn(),
-            'expired' => $pdo->query("SELECT COUNT(*) FROM services WHERE is_active = 0")->fetchColumn(),
-            'expiring_soon' => $pdo->query("
-                SELECT COUNT(*) FROM services 
-                WHERE is_active = 1 
-                AND datetime(expire_date) <= datetime('now', '+7 days')
-                AND datetime(expire_date) >= datetime('now')
-            ")->fetchColumn(),
-        ];
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM services");
+        $stmt->execute();
+        $stats['total'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM services WHERE is_active = 1");
+        $stmt->execute();
+        $stats['active'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM services WHERE is_active = 0");
+        $stmt->execute();
+        $stats['expired'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM services 
+            WHERE is_active = 1 
+            AND datetime(expire_date) <= datetime('now', '+7 days')
+            AND datetime(expire_date) >= datetime('now')
+        ");
+        $stmt->execute();
+        $stats['expiring_soon'] = $stmt->fetchColumn();
         
         return view('services.index', compact('services', 'plans', 'stats'));
     }
@@ -86,11 +90,11 @@ class ServiceController extends Controller
      */
     public function show($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // اطلاعات سرویس
         $stmt = $pdo->prepare("
@@ -125,12 +129,12 @@ class ServiceController extends Controller
      */
     public function toggleStatus($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE services 
@@ -151,12 +155,12 @@ class ServiceController extends Controller
      */
     public function destroy($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("DELETE FROM services WHERE id = :id");
             $stmt->execute(['id' => $id]);
@@ -165,6 +169,76 @@ class ServiceController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست سرویس‌ها به صورت JSON (API)
+     */
+    public function apiIndex(Request $request)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $query = "
+                SELECT s.*, u.user_id, p.name as plan_name 
+                FROM services s
+                LEFT JOIN users u ON s.user_id = u.user_id
+                LEFT JOIN plans p ON s.plan_id = p.id
+                WHERE 1=1
+            ";
+            $params = [];
+            
+            if ($request->has('status')) {
+                $query .= " AND s.is_active = :status";
+                $params['status'] = $request->get('status') === 'active' ? 1 : 0;
+            }
+            
+            $query .= " ORDER BY s.created_at DESC LIMIT 100";
+            
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
+            $services = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            return response()->json(['success' => true, 'data' => $services]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات سرویس به صورت JSON (API)
+     */
+    public function apiShow($id)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("
+                SELECT s.*, u.user_id, u.role, p.name as plan_name, p.category
+                FROM services s
+                LEFT JOIN users u ON s.user_id = u.user_id
+                LEFT JOIN plans p ON s.plan_id = p.id
+                WHERE s.id = :id
+            ");
+            $stmt->execute(['id' => $id]);
+            $service = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$service) {
+                return response()->json(['success' => false, 'message' => 'سرویس یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $service]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

@@ -6,25 +6,20 @@ use Illuminate\Http\Request;
 
 class PlanController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست پلن‌ها
      */
     public function index()
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
-        $plans = $pdo->query("SELECT * FROM plans ORDER BY category, price")->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT * FROM plans ORDER BY category, price");
+        $stmt->execute();
+        $plans = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // آمار هر پلن
         foreach ($plans as &$plan) {
@@ -65,12 +60,12 @@ class PlanController extends Controller
             'device_limit' => 'required|integer|min:1',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 INSERT INTO plans (name, category, duration_days, traffic_gb, price, device_limit, is_test_plan)
@@ -98,11 +93,11 @@ class PlanController extends Controller
      */
     public function edit($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         $stmt = $pdo->prepare("SELECT * FROM plans WHERE id = :id");
         $stmt->execute(['id' => $id]);
@@ -129,12 +124,12 @@ class PlanController extends Controller
             'device_limit' => 'required|integer|min:1',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE plans 
@@ -169,12 +164,12 @@ class PlanController extends Controller
      */
     public function destroy($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             // بررسی اینکه آیا سرویسی با این پلن وجود دارد
             $stmt = $pdo->prepare("SELECT COUNT(*) FROM services WHERE plan_id = :id");
@@ -192,6 +187,68 @@ class PlanController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست پلن‌ها به صورت JSON (API)
+     */
+    public function apiIndex()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM plans ORDER BY category, price");
+            $stmt->execute();
+            $plans = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            // آمار هر پلن
+            foreach ($plans as &$plan) {
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) as total,
+                           SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active
+                    FROM services 
+                    WHERE plan_id = :plan_id
+                ");
+                $stmt->execute(['plan_id' => $plan['id']]);
+                $stats = $stmt->fetch(\PDO::FETCH_ASSOC);
+                $plan['services_count'] = $stats['total'];
+                $plan['active_services_count'] = $stats['active'];
+            }
+            
+            return response()->json(['success' => true, 'data' => $plans]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات پلن به صورت JSON (API)
+     */
+    public function apiShow($id)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM plans WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $plan = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$plan) {
+                return response()->json(['success' => false, 'message' => 'پلن یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $plan]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

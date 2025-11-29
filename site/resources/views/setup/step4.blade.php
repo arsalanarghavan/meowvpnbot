@@ -1,220 +1,156 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>مرحله 4 - نصب</title>
-    <link rel="stylesheet" href="{{asset('assets/css/bootstrap.css')}}">
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 50px 0;
-        }
-        .wizard-container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        .summary-box {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 10px 0;
-        }
-        .install-log {
-            background: #1e1e1e;
-            color: #00ff00;
-            padding: 20px;
-            border-radius: 8px;
-            font-family: monospace;
-            height: 300px;
-            overflow-y: auto;
-            display: none;
-        }
-        .btn-install {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            border: none;
-            border-radius: 8px;
-            padding: 15px 40px;
-            font-weight: bold;
-            color: white;
-            font-size: 18px;
-        }
-        .spinner-border {
-            display: none;
-        }
-    </style>
-</head>
-<body>
-    <div class="wizard-container">
-        <div class="card">
-            <div class="card-header bg-success text-white text-center">
-                <h4>مرحله 4 از 4 - بررسی و نصب</h4>
-            </div>
-            <div class="card-body">
-                <h5 class="mb-4">خلاصه تنظیمات:</h5>
+@extends('layouts.app.master')
+@section('title', 'مرحله 4 - نصب')
 
-                <div class="summary-box">
-                    <h6><strong>🤖 ربات تلگرام:</strong></h6>
-                    <ul>
-                        <li>یوزرنیم: @{{ $setup_data['step1']['bot_username'] }}</li>
-                        <li>Telegram ID ادمین: {{ $setup_data['step1']['admin_telegram_id'] }}</li>
-                    </ul>
+@section('content')
+<div class="min-h-screen bg-gradient-to-br from-primary/20 to-primary/40 p-4">
+    <div class="max-w-3xl mx-auto">
+        <Card class="shadow-xl">
+            <CardHeader>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <CardTitle class="text-2xl">مرحله 4: بررسی و نصب</CardTitle>
+                        <CardDescription>بررسی تنظیمات و شروع نصب</CardDescription>
+                    </div>
+                    <Badge variant="outline">مرحله 4 از 4</Badge>
                 </div>
-
-                <div class="summary-box">
-                    <h6><strong>🌐 پنل :</strong></h6>
-                    <ul>
-                        <li>نام: {{ $setup_data['step2']['panel_name'] }}</li>
-                        <li>نوع: {{ $setup_data['step2']['panel_type'] == 'marzban' ? 'Marzban' : 'Hiddify' }}</li>
-                        <li>آدرس: {{ $setup_data['step2']['panel_url'] }}</li>
-                    </ul>
+                <div class="mt-4">
+                    <div class="h-2 bg-muted rounded-full overflow-hidden">
+                        <div class="h-full bg-primary rounded-full" style="width: 100%"></div>
+                    </div>
                 </div>
+            </CardHeader>
+            <CardContent>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="font-semibold mb-2">🤖 ربات تلگرام:</h3>
+                        <div class="bg-muted p-4 rounded-md space-y-1 text-sm">
+                            <p><strong>یوزرنیم:</strong> @{{ $setup_data['step1']['bot_username'] }}</p>
+                            <p><strong>Telegram ID ادمین:</strong> {{ $setup_data['step1']['admin_telegram_id'] }}</p>
+                        </div>
+                    </div>
 
-                <div class="summary-box">
-                    <h6><strong>💳 تنظیمات اضافی:</strong></h6>
-                    <ul>
-                        <li>درگاه پرداخت: {{ !empty($setup_data['step3']['zarinpal_merchant']) ? 'فعال' : 'غیرفعال' }}</li>
-                        <li>پشتیبانی: {{ !empty($setup_data['step3']['support_username']) ? '@'.$setup_data['step3']['support_username'] : 'تنظیم نشده' }}</li>
-                        <li>کانال: {{ $setup_data['step3']['channel_id'] ?: 'تنظیم نشده' }}</li>
-                    </ul>
+                    <div>
+                        <h3 class="font-semibold mb-2">🌐 پنل VPN:</h3>
+                        <div class="bg-muted p-4 rounded-md space-y-1 text-sm">
+                            <p><strong>نام:</strong> {{ $setup_data['step2']['panel_name'] }}</p>
+                            <p><strong>نوع:</strong> {{ $setup_data['step2']['panel_type'] == 'marzban' ? 'Marzban' : 'Hiddify' }}</p>
+                            <p><strong>آدرس:</strong> {{ $setup_data['step2']['panel_url'] }}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="font-semibold mb-2">💳 تنظیمات اضافی:</h3>
+                        <div class="bg-muted p-4 rounded-md space-y-1 text-sm">
+                            <p><strong>درگاه پرداخت:</strong> {{ !empty($setup_data['step3']['zarinpal_merchant']) ? 'فعال' : 'غیرفعال' }}</p>
+                            <p><strong>پشتیبانی:</strong> {{ !empty($setup_data['step3']['support_username']) ? '@'.$setup_data['step3']['support_username'] : 'تنظیم نشده' }}</p>
+                            <p><strong>کانال:</strong> {{ $setup_data['step3']['channel_id'] ?: 'تنظیم نشده' }}</p>
+                        </div>
+                    </div>
+
+                    <Alert>
+                        <AlertTitle>⚠️ توجه</AlertTitle>
+                        <AlertDescription>
+                            با کلیک بر روی دکمه "شروع نصب"، فرآیند نصب خودکار ربات آغاز می‌شود. این ممکن است چند دقیقه طول بکشد.
+                        </AlertDescription>
+                    </Alert>
+
+                    <div id="installLog" class="hidden bg-black text-green-400 p-4 rounded-md font-mono text-sm h-64 overflow-y-auto">
+                    </div>
+
+                    <div class="flex gap-4">
+                        <Button variant="outline" type="button" as="a" href="{{ route('setup.step3') }}" id="btnBack" class="flex-1">قبلی</Button>
+                        <Button 
+                            type="button" 
+                            onclick="startInstallation()" 
+                            id="btnInstall"
+                            class="flex-1"
+                            :loading="false"
+                        >
+                            <span id="btnText">🚀 شروع نصب</span>
+                        </Button>
+                    </div>
                 </div>
-
-                <div class="alert alert-warning mt-4">
-                    <strong>⚠️ توجه:</strong> با کلیک بر روی دکمه "شروع نصب"، فرآیند نصب خودکار ربات آغاز می‌شود. این ممکن است چند دقیقه طول بکشد.
-                </div>
-
-                <div id="installLog" class="install-log mt-4"></div>
-
-                <div class="text-center mt-4">
-                    <a href="{{ route('setup.step3') }}" class="btn btn-secondary" id="btnBack">قبلی →</a>
-                    <button onclick="startInstallation()" class="btn btn-install" id="btnInstall">
-                        <span class="spinner-border spinner-border-sm" id="spinner"></span>
-                        <span id="btnText">🚀 شروع نصب</span>
-                    </button>
-                </div>
-            </div>
-        </div>
+            </CardContent>
+        </Card>
     </div>
+</div>
+@endsection
 
-    <script src="{{asset('assets/js/jquery-3.5.1.min.js')}}"></script>
-    <script>
-        function addLog(message) {
-            var log = $('#installLog');
-            log.show();
-            log.append('[' + new Date().toLocaleTimeString() + '] ' + message + '\n');
-            log.scrollTop(log[0].scrollHeight);
-        }
+@section('scripts')
+<script>
+function addLog(message) {
+    const log = document.getElementById('installLog');
+    if (log) {
+        log.classList.remove('hidden');
+        const time = new Date().toLocaleTimeString('fa-IR');
+        log.innerHTML += `[${time}] ${message}\n`;
+        log.scrollTop = log.scrollHeight;
+    }
+}
 
-        function startInstallation() {
-            var btn = $('#btnInstall');
-            var spinner = $('#spinner');
-            var btnText = $('#btnText');
-            var btnBack = $('#btnBack');
+function startInstallation() {
+    const btn = document.getElementById('btnInstall');
+    const btnText = document.getElementById('btnText');
+    const btnBack = document.getElementById('btnBack');
+    const log = document.getElementById('installLog');
 
-            // غیرفعال کردن دکمه‌ها
-            btn.prop('disabled', true);
-            btnBack.prop('disabled', true);
-            spinner.show();
-            btnText.text(' در حال نصب...');
+    btn.disabled = true;
+    btnBack.disabled = true;
+    btnText.textContent = 'در حال نصب...';
+    log.classList.remove('hidden');
 
-            addLog('شروع فرآیند نصب...');
-            addLog('ایجاد فایل تنظیمات ربات...');
+    addLog('شروع فرآیند نصب...');
+    addLog('ایجاد فایل تنظیمات ربات...');
 
-            var installUrl = '{{ route("setup.install") }}';
-            addLog('URL نصب: ' + installUrl);
-            
-            $.ajax({
-                url: installUrl,
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                data: {
-                    _token: '{{ csrf_token() }}'
-                },
-                timeout: 300000, // 5 minutes timeout
-                beforeSend: function() {
-                    addLog('در حال ارسال درخواست به سرور...');
-                },
-                success: function(response) {
-                    if (response.success) {
-                        addLog('✓ فایل .env ایجاد شد');
-                        addLog('✓ Dependencies نصب شد');
-                        addLog('✓ Migrations اجرا شد');
-                        addLog('✓ پنل  ثبت شد');
-                        addLog('✓ ربات راه‌اندازی شد');
-                        addLog('');
-                        addLog('=== نصب با موفقیت انجام شد! ===');
+    const installUrl = '{{ route("setup.install") }}';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
-                        setTimeout(function() {
-                            window.location.href = response.redirect;
-                        }, 2000);
-                    } else {
-                        addLog('✗ خطا: ' + response.message);
-                        btn.prop('disabled', false);
-                        btnBack.prop('disabled', false);
-                        spinner.hide();
-                        btnText.text('🚀 شروع نصب');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    var errorMessage = 'خطای ناشناخته';
-                    
-                    // بررسی نوع خطا
-                    if (status === 'timeout') {
-                        errorMessage = 'زمان درخواست به پایان رسید. این فرآیند ممکن است چند دقیقه طول بکشد.';
-                    } else if (status === 'abort') {
-                        errorMessage = 'درخواست لغو شد.';
-                    } else if (xhr.status === 0) {
-                        errorMessage = 'خطا در اتصال به سرور. لطفاً اتصال اینترنت و تنظیمات سرور را بررسی کنید.';
-                    } else if (xhr.status === 419) {
-                        errorMessage = 'خطای CSRF Token. لطفاً صفحه را refresh کنید و دوباره تلاش کنید.';
-                    } else if (xhr.status === 500) {
-                        errorMessage = 'خطای داخلی سرور. لطفاً لاگ‌های سرور را بررسی کنید.';
-                    }
-                    
-                    // تلاش برای دریافت پیام خطا از response
-                    if (xhr.responseJSON) {
-                        if (xhr.responseJSON.message) {
-                            errorMessage = xhr.responseJSON.message;
-                        } else if (xhr.responseJSON.error) {
-                            errorMessage = xhr.responseJSON.error;
-                        }
-                    } else if (xhr.responseText) {
-                        try {
-                            var parsed = JSON.parse(xhr.responseText);
-                            if (parsed.message) {
-                                errorMessage = parsed.message;
-                            }
-                        } catch(e) {
-                            // اگر JSON نبود، از responseText استفاده کن
-                            if (xhr.responseText.length < 200) {
-                                errorMessage = xhr.responseText;
-                            }
-                        }
-                    }
-                    
-                    addLog('✗ خطای سرور: ' + errorMessage);
-                    addLog('✗ کد خطا: ' + xhr.status + ' | Status: ' + status);
-                    addLog('✗ Error: ' + error);
-                    
-                    // نمایش alert برای خطاهای مهم
-                    if (xhr.status === 500 || xhr.status === 0 || status === 'timeout') {
-                        alert('خطا در نصب:\n\n' + errorMessage + '\n\nلطفاً لاگ‌های سرور را بررسی کنید:\ntail -f site/storage/logs/laravel.log');
-                    }
-                    
-                    btn.prop('disabled', false);
-                    btnBack.prop('disabled', false);
-                    spinner.hide();
-                    btnText.text('🚀 شروع نصب');
-                }
+    fetch(installUrl, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            _token: csrfToken
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'خطای سرور');
             });
         }
-    </script>
-</body>
-</html>
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            addLog('✓ فایل .env ایجاد شد');
+            addLog('✓ Dependencies نصب شد');
+            addLog('✓ Migrations اجرا شد');
+            addLog('✓ پنل ثبت شد');
+            addLog('✓ ربات راه‌اندازی شد');
+            addLog('');
+            addLog('=== نصب با موفقیت انجام شد! ===');
+
+            setTimeout(() => {
+                window.location.href = data.redirect || '/dashboard';
+            }, 2000);
+        } else {
+            addLog('✗ خطا: ' + (data.message || 'خطای ناشناخته'));
+            btn.disabled = false;
+            btnBack.disabled = false;
+            btnText.textContent = '🚀 شروع نصب';
+        }
+    })
+    .catch(error => {
+        addLog('✗ خطای سرور: ' + error.message);
+        btn.disabled = false;
+        btnBack.disabled = false;
+        btnText.textContent = '🚀 شروع نصب';
+    });
+}
+</script>
+@endsection
 

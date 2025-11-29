@@ -7,12 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class BackupImportController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
 
     /**
      * نمایش صفحه import
@@ -76,7 +70,7 @@ class BackupImportController extends Controller
      */
     private function importMySQLDump($sqlContent, $importType)
     {
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         $stats = [
@@ -166,7 +160,7 @@ class BackupImportController extends Controller
      */
     private function importSQLiteDump($sqlContent, $importType)
     {
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdo->beginTransaction();
 

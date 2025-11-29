@@ -1,28 +1,17 @@
 @extends('layouts.app.master')
-@section('title', 'error-404')
-
-@section('css')
-@endsection
-
-@section('style')
-@endsection
+@section('title', '404 - صفحه یافت نشد')
 
 @section('content')
-<!-- error-404 start-->
-<div class="error-wrapper">
-   <div class="container">
-      <img class="img-100" src="{{route('home')}}/assets/images/other-images/sad.png" alt="">
-      <div class="error-heading">
-         <h2 class="headline font-danger">404</h2>
-      </div>
-      <div class="col-md-8 offset-md-2">
-         <p class="sub-content">The page you are attempting to reach is currently not available. This may be because the page does not exist or has been moved.</p>
-      </div>
-      <div><a class="btn btn-danger-gradien btn-lg" href="{{route('home')}}">BACK TO HOME PAGE</a></div>
-   </div>
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="text-center space-y-4">
+        <h1 class="text-6xl font-bold">404</h1>
+        <h2 class="text-2xl font-semibold">صفحه یافت نشد</h2>
+        <p class="text-muted-foreground">صفحه‌ای که به دنبال آن هستید وجود ندارد.</p>
+        <div class="flex gap-4 justify-center">
+            <Button as="a" href="{{ route('home') }}">بازگشت به صفحه اصلی</Button>
+            <Button variant="outline" onclick="history.back()">بازگشت</Button>
+        </div>
+    </div>
 </div>
-<!-- error-404 end      -->
 @endsection
 
-@section('script')
-@endsection

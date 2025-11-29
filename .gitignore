@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+backups/
+*.sql
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+bot.log
+
+# Laravel specific
+site/storage/*.key
+site/.env
+site/.env.backup
+site/.phpunit.result.cache
+site/bootstrap/cache/*
+!site/bootstrap/cache/.gitignore
+site/storage/framework/cache/*
+!site/storage/framework/cache/.gitignore
+site/storage/framework/sessions/*
+!site/storage/framework/sessions/.gitignore
+site/storage/framework/views/*
+!site/storage/framework/views/.gitignore
+site/storage/logs/*
+!site/storage/logs/.gitignore
+
+# Node modules
+node_modules/
+site/node_modules/
+npm-debug.log
+yarn-error.log
+
+# Compiled assets
+site/public/hot
+site/public/storage
+site/storage/*.key
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Alembic
+alembic/versions/*.pyc
+

@@ -19,9 +19,13 @@ async def start_user_search(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def receive_user_id_and_show_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives a user ID, searches for the user, and displays their info."""
-    try:
-        user_id = int(update.message.text)
-    except (ValueError, TypeError):
+    from bot.utils.validators import validate_user_id, sanitize_text
+    
+    # Sanitize and validate input
+    text_input = sanitize_text(update.message.text, max_length=20)
+    user_id = validate_user_id(text_input)
+    
+    if user_id is None:
         await update.message.reply_text(_('messages.error_invalid_user_id'))
         return AWAITING_USER_ID_FOR_SEARCH
 
@@ -100,10 +104,23 @@ async def start_add_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def receive_amount_and_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives the amount and updates the user's wallet balance."""
+    from bot.utils.validators import validate_amount, sanitize_text
+    
+    # Validate user_id from context
     try:
-        amount = int(update.message.text)
         user_id = context.user_data['target_user_id']
-    except (ValueError, TypeError, KeyError):
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise KeyError
+    except KeyError:
+        await update.message.reply_text(_('messages.error_invalid_amount_or_user'))
+        context.user_data.clear()
+        return END_CONVERSATION
+    
+    # Sanitize and validate amount
+    text_input = sanitize_text(update.message.text, max_length=20)
+    amount = validate_amount(text_input, min_amount=0, max_amount=100000000)  # Max 100 million
+    
+    if amount is None:
         await update.message.reply_text(_('messages.error_invalid_amount_or_user'))
         context.user_data.clear()
         return END_CONVERSATION
@@ -111,6 +128,15 @@ async def receive_amount_and_update(update: Update, context: ContextTypes.DEFAUL
     db = SessionLocal()
     try:
         user_queries.update_wallet_balance(db, user_id, amount)
+        
+        # Log admin action
+        log_admin_action(
+            admin_id=update.effective_user.id,
+            action='balance_added',
+            target_type='user',
+            target_id=user_id,
+            details={'amount': amount}
+        )
 
         await update.message.reply_text(_('messages.admin_balance_added_successfully', amount=amount, user_id=user_id))
 

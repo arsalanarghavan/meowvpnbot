@@ -7,7 +7,7 @@ from telegram.ext import (ContextTypes, ConversationHandler, MessageHandler,
 
 from core.translator import _
 from database.engine import SessionLocal
-from database.models.queries import card_queries
+from database.queries import card_queries
 from bot.states.conversation_states import (
     AWAITING_CARD_NUMBER, AWAITING_CARD_HOLDER, AWAITING_CARD_LIMIT,
     AWAITING_CARD_PRIORITY, AWAITING_CARD_NOTE, CONFIRMING_CARD_CREATION,
@@ -349,33 +349,35 @@ async def start_edit_card_field(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def receive_new_card_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receives the new value for the edited field."""
+    from bot.utils.validators import validate_positive_integer, validate_text_length, sanitize_text
+    
     field = context.user_data.get('editing_field')
     card_id = context.user_data.get('editing_card_id')
+    
+    if not field or not card_id:
+        await update.message.reply_text(_('messages.error_general'))
+        return END_CONVERSION
     
     db = SessionLocal()
     try:
         if field == 'limit':
-            try:
-                new_value = int(update.message.text)
-                if new_value < 0:
-                    raise ValueError
-                card_queries.update_card(db, card_id, daily_limit=new_value)
-            except (ValueError, TypeError):
+            text_input = sanitize_text(update.message.text, max_length=20)
+            new_value = validate_positive_integer(text_input, min_value=0, max_value=1000000000)
+            if new_value is None:
                 await update.message.reply_text(_('messages.error_invalid_number_zero_ok'))
                 return AWAITING_NEW_CARD_VALUE
+            card_queries.update_card(db, card_id, daily_limit=new_value)
                 
         elif field == 'priority':
-            try:
-                new_value = int(update.message.text)
-                if new_value < 0:
-                    raise ValueError
-                card_queries.update_card(db, card_id, priority=new_value)
-            except (ValueError, TypeError):
+            text_input = sanitize_text(update.message.text, max_length=20)
+            new_value = validate_positive_integer(text_input, min_value=0, max_value=1000)
+            if new_value is None:
                 await update.message.reply_text(_('messages.error_invalid_number_zero_ok'))
                 return AWAITING_NEW_CARD_VALUE
+            card_queries.update_card(db, card_id, priority=new_value)
                 
         elif field == 'note':
-            new_value = update.message.text.strip()
+            new_value = validate_text_length(update.message.text, min_length=0, max_length=200)
             card_queries.update_card(db, card_id, note=new_value if new_value else None)
         
         await update.message.reply_text(_('messages.admin_card_updated'))

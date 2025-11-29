@@ -6,30 +6,25 @@ use Illuminate\Http\Request;
 
 class MarketerController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست بازاریاب‌ها
      */
     public function index()
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // لیست بازاریاب‌ها
-        $marketers = $pdo->query("
+        $stmt = $pdo->prepare("
             SELECT * FROM users 
-            WHERE role = 'marketer' 
+            WHERE role = :role 
             ORDER BY created_at DESC
-        ")->fetchAll(\PDO::FETCH_ASSOC);
+        ");
+        $stmt->execute(['role' => 'marketer']);
+        $marketers = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         // محاسبه آمار هر بازاریاب
         foreach ($marketers as &$marketer) {
@@ -57,12 +52,19 @@ class MarketerController extends Controller
         }
         
         // آمار کلی
-        $stats = [
-            'total' => count($marketers),
-            'total_commissions' => $pdo->query("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions")->fetchColumn(),
-            'unpaid_commissions' => $pdo->query("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE is_paid_out = 0")->fetchColumn(),
-            'total_referrals' => $pdo->query("SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL")->fetchColumn(),
-        ];
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions");
+        $stmt->execute();
+        $stats['total_commissions'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE is_paid_out = 0");
+        $stmt->execute();
+        $stats['unpaid_commissions'] = $stmt->fetchColumn();
+        
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL");
+        $stmt->execute();
+        $stats['total_referrals'] = $stmt->fetchColumn();
+        
+        $stats['total'] = count($marketers);
         
         return view('marketers.index', compact('marketers', 'stats'));
     }
@@ -72,11 +74,11 @@ class MarketerController extends Controller
      */
     public function show($userId)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         // اطلاعات بازاریاب
         $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = :user_id AND role = 'marketer'");
@@ -128,12 +130,12 @@ class MarketerController extends Controller
      */
     public function payout($userId)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             $pdo->beginTransaction();
             
             // محاسبه کمیسیون‌های پرداخت نشده
@@ -177,6 +179,80 @@ class MarketerController extends Controller
         } catch (\Exception $e) {
             $pdo->rollBack();
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست بازاریاب‌ها به صورت JSON (API)
+     */
+    public function apiIndex()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("
+                SELECT * FROM users 
+                WHERE role = :role 
+                ORDER BY created_at DESC
+            ");
+            $stmt->execute(['role' => 'marketer']);
+            $marketers = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            // محاسبه آمار هر بازاریاب
+            foreach ($marketers as &$marketer) {
+                $userId = $marketer['user_id'];
+                
+                $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE referrer_id = :user_id");
+                $stmt->execute(['user_id' => $userId]);
+                $marketer['referrals_count'] = $stmt->fetchColumn();
+                
+                $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE marketer_id = :user_id");
+                $stmt->execute(['user_id' => $userId]);
+                $marketer['total_commission'] = $stmt->fetchColumn();
+            }
+            
+            return response()->json(['success' => true, 'data' => $marketers]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات بازاریاب به صورت JSON (API)
+     */
+    public function apiShow($userId)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = :user_id AND role = 'marketer'");
+            $stmt->execute(['user_id' => $userId]);
+            $marketer = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$marketer) {
+                return response()->json(['success' => false, 'message' => 'بازاریاب یافت نشد!'], 404);
+            }
+            
+            // آمار اضافی
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE referrer_id = :user_id");
+            $stmt->execute(['user_id' => $userId]);
+            $marketer['referrals_count'] = $stmt->fetchColumn();
+            
+            $stmt = $pdo->prepare("SELECT IFNULL(SUM(commission_amount), 0) FROM commissions WHERE marketer_id = :user_id");
+            $stmt->execute(['user_id' => $userId]);
+            $marketer['total_commission'] = $stmt->fetchColumn();
+            
+            return response()->json(['success' => true, 'data' => $marketer]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

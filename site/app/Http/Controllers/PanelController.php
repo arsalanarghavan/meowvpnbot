@@ -6,25 +6,20 @@ use Illuminate\Http\Request;
 
 class PanelController extends Controller
 {
-    private $dbPath;
-
-    public function __construct()
-    {
-        $this->dbPath = base_path('../vpn_bot.db');
-    }
-
     /**
      * نمایش لیست پنل‌ها
      */
     public function index()
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
-        $panels = $pdo->query("SELECT * FROM panels ORDER BY priority, id")->fetchAll(\PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare("SELECT * FROM panels ORDER BY priority, id");
+        $stmt->execute();
+        $panels = $stmt->fetchAll(\PDO::FETCH_ASSOC);
         
         return view('panels.index', compact('panels'));
     }
@@ -50,12 +45,12 @@ class PanelController extends Controller
             'password' => 'required|max:100',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 INSERT INTO panels (name, panel_type, api_base_url, username, password, is_active)
@@ -82,11 +77,11 @@ class PanelController extends Controller
      */
     public function edit($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
-        $pdo = new \PDO("sqlite:{$this->dbPath}");
+        $pdo = $this->getBotConnection();
         
         $stmt = $pdo->prepare("SELECT * FROM panels WHERE id = :id");
         $stmt->execute(['id' => $id]);
@@ -112,12 +107,12 @@ class PanelController extends Controller
             'password' => 'required|max:100',
         ]);
 
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return redirect()->back()->with('error', 'دیتابیس ربات یافت نشد!');
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE panels 
@@ -150,12 +145,12 @@ class PanelController extends Controller
      */
     public function toggleStatus($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE panels 
@@ -176,12 +171,12 @@ class PanelController extends Controller
      */
     public function destroy($id)
     {
-        if (!file_exists($this->dbPath)) {
+        if (!$this->botDatabaseExists()) {
             return response()->json(['success' => false, 'message' => 'دیتابیس یافت نشد!']);
         }
 
         try {
-            $pdo = new \PDO("sqlite:{$this->dbPath}");
+            $pdo = $this->getBotConnection();
             
             $stmt = $pdo->prepare("DELETE FROM panels WHERE id = :id");
             $stmt->execute(['id' => $id]);
@@ -190,6 +185,54 @@ class PanelController extends Controller
             
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * دریافت لیست پنل‌ها به صورت JSON (API)
+     */
+    public function apiIndex()
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM panels ORDER BY priority, id");
+            $stmt->execute();
+            $panels = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+            
+            return response()->json(['success' => true, 'data' => $panels]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * دریافت جزئیات پنل به صورت JSON (API)
+     */
+    public function apiShow($id)
+    {
+        if (!$this->botDatabaseExists()) {
+            return response()->json(['success' => false, 'message' => 'دیتابیس ربات یافت نشد!'], 404);
+        }
+
+        try {
+            $pdo = $this->getBotConnection();
+            
+            $stmt = $pdo->prepare("SELECT * FROM panels WHERE id = :id");
+            $stmt->execute(['id' => $id]);
+            $panel = $stmt->fetch(\PDO::FETCH_ASSOC);
+            
+            if (!$panel) {
+                return response()->json(['success' => false, 'message' => 'پنل یافت نشد!'], 404);
+            }
+            
+            return response()->json(['success' => true, 'data' => $panel]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }
