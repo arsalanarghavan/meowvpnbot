@@ -26,7 +26,7 @@ class SetupWizardController extends Controller
         if (strpos($basePath, '/site') !== false) {
             $this->projectRoot = dirname($basePath);
         } else {
-            $this->projectRoot = base_path('..');
+        $this->projectRoot = base_path('..');
         }
 
         // بررسی صحت مسیر تشخیص داده شده
@@ -36,12 +36,12 @@ class SetupWizardController extends Controller
         }
 
         // اولویت سوم: جستجو در مسیرهای ممکن
-        $possiblePaths = [
+            $possiblePaths = [
             '/var/www/meowvpnbot',  // مسیر استاندارد (دوباره چک می‌شود برای اطمینان)
             dirname($basePath),      // یک سطح بالا از base_path
             base_path('..'),         // یک سطح بالا (relative)
             realpath(base_path('..')), // یک سطح بالا (absolute)
-        ];
+            ];
 
         // اضافه کردن مسیرهای خاص توسعه (فقط برای محیط توسعه)
         if (strpos($basePath, '/mnt/') !== false || strpos($basePath, '/home/') !== false) {
@@ -52,10 +52,10 @@ class SetupWizardController extends Controller
             }
         }
 
-        foreach ($possiblePaths as $path) {
-            if ($path && is_dir($path) && file_exists($path . '/main.py')) {
-                $this->projectRoot = $path;
-                \Log::info("SetupWizard: Found project root at: {$path}");
+            foreach ($possiblePaths as $path) {
+                if ($path && is_dir($path) && file_exists($path . '/main.py')) {
+                    $this->projectRoot = $path;
+                    \Log::info("SetupWizard: Found project root at: {$path}");
                 return;
             }
         }
